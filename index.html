@@ -7,8 +7,6 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{
     --navy:#0B2540;
@@ -82,7 +80,7 @@
   .badge-red{ background:rgba(168,52,42,0.18); color:#F3C9C4; border-color:#A8342A; }
 
   @media print{
-    nav, #weatherMap, #radarPlayBtn, .no-print{ display:none !important; }
+    nav, .no-print{ display:none !important; }
     body{ background:white; color:black; }
     .chart-card{ border:1px solid #999; break-inside:avoid; }
   }
@@ -375,27 +373,12 @@
   </div>
 </section>
 
-<!-- LIVE WEATHER MAP -->
-<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
-  <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="font-display text-lg" style="color:var(--paper)">Live Weather Map</h2>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 07</span>
-    </div>
-    <div id="weatherMap" class="rounded-sm overflow-hidden" style="aspect-ratio: 16 / 9; border:1px solid rgba(217,174,104,0.25);"></div>
-    <div class="flex items-center justify-between mt-2">
-      <p class="font-mono text-[10px]" style="color:var(--paper-dim)">Base map &copy; OpenStreetMap contributors &middot; Rain radar &copy; RainViewer</p>
-      <button id="radarPlayBtn" class="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">▶ Animate radar</button>
-    </div>
-  </div>
-</section>
-
 <!-- FORECAST -->
 <section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">5-Day Forecast</h2>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 08</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 07</span>
     </div>
     <div id="forecastRow" class="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs"></div>
   </div>
