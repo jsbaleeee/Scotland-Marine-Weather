@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scottish Marine Weather</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --navy:#0B2540;
+    --navy-deep:#071A2E;
+    --paper:#F1EBDA;
+    --paper-dim:#E5DCC4;
+    --brass:#B8863B;
+    --brass-light:#D9AE68;
+    --admiralty-red:#A8342A;
+    --seafoam:#6FA8A0;
+    --ink:#132030;
+  }
+  html,body{background:var(--navy); font-family:'Inter',sans-serif; color:var(--paper);}
+  .font-display{font-family:'Fraunces',serif;}
+  .font-mono{font-family:'IBM Plex Mono',monospace;}
+
+  .chart-card{
+    background:linear-gradient(180deg, rgba(241,235,218,0.04), rgba(241,235,218,0.015));
+    border:1px solid rgba(217,174,104,0.25);
+    position:relative;
+  }
+  .chart-card::before, .chart-card::after,
+  .chart-corner-bl::before, .chart-corner-br::before{
+    content:"";
+    position:absolute;
+    width:14px; height:14px;
+    border-color:var(--brass);
+  }
+  .chart-card::before{ top:-1px; left:-1px; border-top:2px solid var(--brass); border-left:2px solid var(--brass);}
+  .chart-card::after{ top:-1px; right:-1px; border-top:2px solid var(--brass); border-right:2px solid var(--brass);}
+  .chart-corner-bl::before{ position:absolute; bottom:-1px; left:-1px; border-bottom:2px solid var(--brass); border-left:2px solid var(--brass); content:"";}
+  .chart-corner-br::before{ position:absolute; bottom:-1px; right:-1px; border-bottom:2px solid var(--brass); border-right:2px solid var(--brass); content:"";}
+
+  .instrument-value{ font-family:'IBM Plex Mono',monospace; letter-spacing:-0.02em; }
+
+  .toggle-track{ background: rgba(241,235,218,0.12); transition: background .25s ease; }
+  .toggle-track.on{ background: var(--brass); }
+  .toggle-knob{ transition: transform .25s ease; }
+  .toggle-track.on .toggle-knob{ transform: translateX(22px); }
+
+  .paywall-blur{ filter: blur(5px); pointer-events:none; user-select:none; }
+
+  select{ -webkit-appearance:none; appearance:none; }
+
+  .tide-dial{
+    background: conic-gradient(from 180deg, rgba(111,168,160,0.15), rgba(184,134,59,0.15), rgba(111,168,160,0.15));
+    border:1px solid rgba(217,174,104,0.3);
+  }
+
+  ::selection{ background:var(--brass); color:var(--navy-deep);}
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- NAVBAR -->
+<nav class="sticky top-0 z-40 border-b border-[rgba(217,174,104,0.25)]" style="background:var(--navy-deep);">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <svg width="30" height="30" viewBox="0 0 40 40" fill="none" class="shrink-0">
+        <circle cx="20" cy="20" r="18" stroke="#D9AE68" stroke-width="1.5"/>
+        <path d="M20 4V36M4 20H36M8.5 8.5L31.5 31.5M31.5 8.5L8.5 31.5" stroke="#D9AE68" stroke-width="0.75" opacity="0.6"/>
+        <path d="M20 8L23 20L20 32L17 20L20 8Z" fill="#D9AE68"/>
+      </svg>
+      <div>
+        <p class="font-display text-lg sm:text-xl leading-tight tracking-wide" style="color:var(--paper)">Scottish Marine Weather</p>
+        <p class="font-mono text-[10px] uppercase tracking-[0.2em]" style="color:var(--brass-light)">Coastal &amp; Sea-State Bulletin</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-4 sm:gap-6">
+      <!-- Location Selector -->
+      <div class="relative">
+        <select id="portSelect" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm pl-3 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--brass-light)] cursor-pointer max-w-[11rem] sm:max-w-none">
+          <optgroup label="Weather stations">
+            <option value="lerwick">Lerwick</option>
+            <option value="kirkwall">Kirkwall</option>
+            <option value="aberdeen">Aberdeen</option>
+          </optgroup>
+          <optgroup label="Mainland">
+            <option value="oban">Oban</option>
+            <option value="mallaig">Mallaig</option>
+            <option value="ullapool">Ullapool</option>
+            <option value="ardrossan">Ardrossan</option>
+            <option value="troon">Troon</option>
+            <option value="gourock">Gourock</option>
+            <option value="wemyssbay">Wemyss Bay</option>
+            <option value="largs">Largs</option>
+            <option value="claonaig">Claonaig</option>
+            <option value="tarbertkintyre">Tarbert (Kintyre)</option>
+            <option value="kennacraig">Kennacraig</option>
+            <option value="tayinloan">Tayinloan</option>
+            <option value="portavadie">Portavadie</option>
+            <option value="lochaline">Lochaline</option>
+            <option value="kilcreggan">Kilcreggan</option>
+            <option value="colintraive">Colintraive</option>
+            <option value="gallanach">Gallanach</option>
+            <option value="fionnphort">Fionnphort</option>
+          </optgroup>
+          <optgroup label="Islands">
+            <option value="brodick">Brodick (Arran)</option>
+            <option value="lochranza">Lochranza (Arran)</option>
+            <option value="rothesay">Rothesay (Bute)</option>
+            <option value="rhubodach">Rhubodach (Bute)</option>
+            <option value="millport">Millport (Cumbrae)</option>
+            <option value="gigha">Gigha</option>
+            <option value="dunoon">Dunoon</option>
+            <option value="kerrera">Kerrera</option>
+            <option value="iona">Iona</option>
+            <option value="fishnish">Fishnish (Mull)</option>
+            <option value="tobermory">Tobermory (Mull)</option>
+            <option value="kilchoan">Kilchoan</option>
+            <option value="craignure">Craignure (Mull)</option>
+            <option value="colonsay">Colonsay</option>
+            <option value="portaskaig">Port Askaig (Islay)</option>
+            <option value="portellen">Port Ellen (Islay)</option>
+            <option value="castlebay">Castlebay (Barra)</option>
+            <option value="eriskay">Eriskay</option>
+            <option value="lochboisdale">Lochboisdale (South Uist)</option>
+            <option value="lochmaddy">Lochmaddy (North Uist)</option>
+            <option value="uig">Uig (Skye)</option>
+            <option value="armadale">Armadale (Skye)</option>
+            <option value="sconser">Sconser (Skye)</option>
+            <option value="raasay">Raasay</option>
+            <option value="tarbertharris">Tarbert (Harris)</option>
+            <option value="stornoway">Stornoway (Lewis)</option>
+            <option value="arinagour">Arinagour (Coll)</option>
+            <option value="scarinish">Scarinish (Tiree)</option>
+            <option value="eigg">Eigg</option>
+            <option value="muck">Muck</option>
+            <option value="rum">Rum</option>
+            <option value="canna">Canna</option>
+          </optgroup>
+        </select>
+        <svg class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="#D9AE68" stroke-width="1.5"/></svg>
+      </div>
+
+      <!-- View Toggle -->
+      <div class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider">
+        <span id="labelStandard" style="color:var(--paper)">Standard</span>
+        <button id="viewToggle" class="toggle-track w-11 h-6 rounded-full relative shrink-0" aria-pressed="false" aria-label="Toggle Pro Maritime View">
+          <span class="toggle-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full" style="background:var(--paper)"></span>
+        </button>
+        <span id="labelPro" style="color:var(--brass-light)">Pro Maritime</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- STATUS BAR -->
+<div class="max-w-6xl mx-auto px-4 sm:px-6 pt-6 pb-2 flex items-center justify-between">
+  <div>
+    <h1 id="portName" class="font-display text-3xl sm:text-4xl" style="color:var(--paper)">Oban</h1>
+    <p id="lastUpdated" class="font-mono text-xs mt-1" style="color:var(--seafoam)">Fetching latest observation&hellip;</p>
+  </div>
+  <div id="unitBadge" class="font-mono text-xs px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">STANDARD &middot; &deg;C &middot; mph</div>
+</div>
+
+<!-- CARDS -->
+<main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+
+  <!-- CARD 1: Air Temp & Weather -->
+  <section class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-lg" style="color:var(--paper)">Air Temp &amp; Weather</h2>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 01</span>
+    </div>
+    <div class="flex items-end justify-between">
+      <div>
+        <p id="airTemp" class="instrument-value text-5xl" style="color:var(--paper)">&mdash;</p>
+        <p id="weatherDesc" class="mt-2 text-sm" style="color:var(--seafoam)">&mdash;</p>
+      </div>
+      <div class="text-right font-mono text-xs space-y-1" style="color:var(--paper-dim)">
+        <p>Feels: <span id="feelsLike">&mdash;</span></p>
+        <p>Humidity: <span id="humidity">&mdash;</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CARD 2: Wind -->
+  <section class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-lg" style="color:var(--paper)">Wind Speed &amp; Peak Gusts</h2>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 02</span>
+    </div>
+    <div class="flex items-end justify-between">
+      <div>
+        <p id="windSpeed" class="instrument-value text-5xl" style="color:var(--paper)">&mdash;</p>
+        <p class="text-sm mt-2" style="color:var(--seafoam)">Sustained wind</p>
+      </div>
+      <div class="text-right">
+        <p id="windGust" class="instrument-value text-2xl" style="color:var(--admiralty-red)">&mdash;</p>
+        <p class="text-xs" style="color:var(--paper-dim)">Peak gust</p>
+      </div>
+    </div>
+    <div id="gustAlert" class="hidden mt-4 font-mono text-xs px-3 py-2 rounded-sm border" style="border-color:var(--admiralty-red); color:#F3C9C4; background:rgba(168,52,42,0.15)">
+      &#9888; GUST ALERT: gusts significantly exceed sustained wind
+    </div>
+  </section>
+
+  <!-- CARD 3: Swell -->
+  <section class="chart-card chart-corner-bl chart-corner-br rounded-md p-5 relative">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-lg" style="color:var(--paper)">Swell Height, Direction &amp; Period</h2>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 03</span>
+    </div>
+    <div id="swellContent" class="grid grid-cols-3 gap-3">
+      <div>
+        <p id="swellHeight" class="instrument-value text-3xl" style="color:var(--paper)">&mdash;</p>
+        <p class="text-xs mt-1" style="color:var(--paper-dim)">Height</p>
+      </div>
+      <div>
+        <p id="swellDirection" class="instrument-value text-3xl" style="color:var(--paper)">&mdash;</p>
+        <p class="text-xs mt-1" style="color:var(--paper-dim)">Direction</p>
+      </div>
+      <div id="swellPeriodWrap">
+        <p id="swellPeriod" class="instrument-value text-3xl" style="color:var(--paper)">&mdash;</p>
+        <p class="text-xs mt-1" style="color:var(--paper-dim)">Period (s)</p>
+      </div>
+    </div>
+    <!-- Paywall overlay for swell period (pro-only) -->
+    <div id="swellPaywall" class="hidden absolute inset-0 rounded-md flex items-center justify-center" style="background:rgba(7,26,46,0.55); backdrop-filter:blur(2px);">
+      <button id="upgradeBtnSwell" class="upgrade-btn font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Upgrade to Maritime Pro &middot; &pound;3/mo</button>
+    </div>
+  </section>
+
+  <!-- CARD 4: Tide -->
+  <section class="chart-card chart-corner-bl chart-corner-br rounded-md p-5 relative">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-lg" style="color:var(--paper)">Tide Status</h2>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 04</span>
+    </div>
+    <div id="tideContent" class="flex items-center gap-5">
+      <div class="tide-dial w-16 h-16 rounded-full shrink-0 flex items-center justify-center">
+        <span id="tideTrendIcon" class="font-mono text-xl" style="color:var(--paper)">&harr;</span>
+      </div>
+      <div class="font-mono text-sm space-y-1" style="color:var(--paper-dim)">
+        <p>Station: <span id="tideStation" style="color:var(--paper)">&mdash;</span></p>
+        <p>Latest level: <span id="tideLevel" style="color:var(--paper)">&mdash;</span></p>
+        <p>Trend: <span id="tideTrend" style="color:var(--paper)">&mdash;</span></p>
+        <p>Typical range: <span id="tideRange" style="color:var(--paper)">&mdash;</span></p>
+      </div>
+    </div>
+    <p id="tideNote" class="text-xs mt-4" style="color:var(--seafoam)"></p>
+    <!-- Paywall overlay for full tide graph (pro-only) -->
+    <div id="tidePaywall" class="hidden absolute inset-0 rounded-md flex items-center justify-center" style="background:rgba(7,26,46,0.55); backdrop-filter:blur(2px);">
+      <button class="upgrade-btn font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Upgrade to Maritime Pro &middot; &pound;3/mo</button>
+    </div>
+  </section>
+
+  <!-- CARD: Crew / Pier Staff Observations (restricted) -->
+  <section class="chart-card chart-corner-bl chart-corner-br rounded-md p-5 relative md:col-span-2">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="font-display text-lg" style="color:var(--paper)">Crew &amp; Pier Staff Observations</h2>
+        <p class="font-mono text-[10px] uppercase tracking-widest mt-0.5" style="color:var(--admiralty-red)">Restricted &middot; Staff Only</p>
+      </div>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 07</span>
+    </div>
+
+    <!-- Locked state -->
+    <div id="crewLocked" class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+      <input id="crewCodeInput" type="password" placeholder="Enter staff access code" autocomplete="off"
+        class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--brass-light)] w-full sm:w-56">
+      <button id="crewUnlockBtn" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm shrink-0" style="background:var(--brass); color:var(--navy-deep)">Unlock crew view</button>
+      <p id="crewError" class="hidden text-xs font-mono" style="color:var(--admiralty-red)">Incorrect code</p>
+    </div>
+
+    <!-- Unlocked state -->
+    <div id="crewUnlocked" class="hidden">
+      <form id="crewNoteForm" class="grid grid-cols-1 sm:grid-cols-[8rem_1fr_auto] gap-2 mb-4">
+        <select id="crewCategory" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-2 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--brass-light)]">
+          <option value="Wind">Wind</option>
+          <option value="Weather">Weather</option>
+          <option value="Traffic">Traffic</option>
+          <option value="Hazard">Hazard</option>
+        </select>
+        <input id="crewNoteText" type="text" maxlength="200" placeholder="e.g. Strong cross-current at slipway on approach" required
+          class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--brass-light)]">
+        <button type="submit" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Post</button>
+      </form>
+
+      <div id="crewNotesList" class="space-y-2"></div>
+      <p id="crewEmptyState" class="font-mono text-xs" style="color:var(--paper-dim)">No observations logged for this port yet.</p>
+    </div>
+
+    <p class="font-mono text-[10px] mt-4" style="color:var(--paper-dim)">
+      Demo only: entries are stored in this browser's local storage, not shared across devices. A production
+      version would sync entries via a real backend so every vessel's bridge sees the same live feed.
+    </p>
+  </section>
+
+</main>
+
+<!-- LIVE WEATHER MAP -->
+<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+  <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-lg" style="color:var(--paper)">Live Weather Map</h2>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 05</span>
+    </div>
+    <div id="weatherMap" class="rounded-sm overflow-hidden" style="aspect-ratio: 16 / 9; border:1px solid rgba(217,174,104,0.25);"></div>
+    <div class="flex items-center justify-between mt-2">
+      <p class="font-mono text-[10px]" style="color:var(--paper-dim)">Base map &copy; OpenStreetMap contributors &middot; Rain radar &copy; RainViewer</p>
+      <button id="radarPlayBtn" class="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">▶ Animate radar</button>
+    </div>
+  </div>
+</section>
+
+<!-- FORECAST -->
+<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+  <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-lg" style="color:var(--paper)">5-Day Forecast</h2>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 06</span>
+    </div>
+    <div id="forecastRow" class="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs"></div>
+  </div>
+</section>
+
+<footer class="max-w-6xl mx-auto px-4 sm:px-6 py-8 mt-4 border-t border-[rgba(217,174,104,0.2)]">
+  <p class="font-mono text-[11px] leading-relaxed" style="color:var(--paper-dim)">
+    <strong style="color:var(--brass-light)">SAFETY NOTICE:</strong> This dashboard is provided for general planning purposes only and is
+    <strong>not a substitute for official Met Office, Maritime &amp; Coastguard Agency (MCA), or Admiralty marine safety information</strong>.
+    Always check the latest Inshore Waters Forecast, Shipping Forecast, and local Coastguard advice before departure.
+    Sea and weather conditions can change rapidly. Data is sourced from third-party APIs and may be delayed, incomplete, or inaccurate.
+    The operators of this site accept no liability for loss, damage, injury, or death arising from reliance on this information.
+    In an emergency at sea, contact HM Coastguard on VHF Channel 16 or dial 999 / 112 and ask for the Coastguard.
+  </p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
