@@ -60,6 +60,33 @@
 
   ::selection{ background:var(--brass); color:var(--navy-deep);}
 
+  /* ---------- Light theme override ---------- */
+  [data-theme="light"]{
+    --navy:#F1EBDA;
+    --navy-deep:#E5DCC4;
+    --paper:#14202B;
+    --paper-dim:#3A4A56;
+    --ink:#F1EBDA;
+  }
+  [data-theme="light"] .chart-card{
+    background:linear-gradient(180deg, rgba(20,32,43,0.03), rgba(20,32,43,0.01));
+  }
+
+  .favourite-star{ cursor:pointer; user-select:none; transition:transform .15s ease; }
+  .favourite-star:hover{ transform:scale(1.15); }
+  .favourite-star.active{ color:var(--brass-light); }
+  .favourite-star:not(.active){ color:rgba(241,235,218,0.3); }
+
+  .badge-green{ background:rgba(111,168,160,0.18); color:#9FD6CC; border-color:#6FA8A0; }
+  .badge-amber{ background:rgba(217,174,104,0.18); color:#F0D8A8; border-color:#D9AE68; }
+  .badge-red{ background:rgba(168,52,42,0.18); color:#F3C9C4; border-color:#A8342A; }
+
+  @media print{
+    nav, #weatherMap, #radarPlayBtn, .no-print{ display:none !important; }
+    body{ background:white; color:black; }
+    .chart-card{ border:1px solid #999; break-inside:avoid; }
+  }
+
   @media (prefers-reduced-motion: reduce){
     *{ animation:none !important; transition:none !important; }
   }
@@ -82,8 +109,10 @@
     </div>
 
     <div class="flex items-center gap-4 sm:gap-6">
-      <!-- Location Selector -->
-      <div class="relative">
+      <!-- Location Selector + Favourite -->
+      <div class="flex items-center gap-2">
+        <span id="favouriteStar" class="favourite-star text-xl" title="Save as favourite">&#9733;</span>
+        <div class="relative">
         <select id="portSelect" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm pl-3 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--brass-light)] cursor-pointer max-w-[11rem] sm:max-w-none">
           <optgroup label="Weather stations">
             <option value="lerwick">Lerwick</option>
@@ -146,6 +175,7 @@
           </optgroup>
         </select>
         <svg class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="#D9AE68" stroke-width="1.5"/></svg>
+        </div>
       </div>
 
       <!-- View Toggle -->
@@ -156,18 +186,29 @@
         </button>
         <span id="labelPro" style="color:var(--brass-light)">Pro Maritime</span>
       </div>
+
+      <button id="themeToggle" class="font-mono text-xs px-2 py-1 rounded-sm border no-print" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)" title="Toggle light/dark">&#9788;</button>
     </div>
   </div>
 </nav>
 
 <!-- STATUS BAR -->
-<div class="max-w-6xl mx-auto px-4 sm:px-6 pt-6 pb-2 flex items-center justify-between">
+<div class="max-w-6xl mx-auto px-4 sm:px-6 pt-6 pb-2 flex items-center justify-between flex-wrap gap-2">
   <div>
-    <h1 id="portName" class="font-display text-3xl sm:text-4xl" style="color:var(--paper)">Oban</h1>
+    <div class="flex items-center gap-3 flex-wrap">
+      <h1 id="portName" class="font-display text-3xl sm:text-4xl" style="color:var(--paper)">Oban</h1>
+      <span id="conditionsBadge" class="font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded-sm border">&mdash;</span>
+    </div>
     <p id="lastUpdated" class="font-mono text-xs mt-1" style="color:var(--seafoam)">Fetching latest observation&hellip;</p>
   </div>
-  <div id="unitBadge" class="font-mono text-xs px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">STANDARD &middot; &deg;C &middot; mph</div>
+  <div class="flex items-center gap-2">
+    <button id="printHandoverBtn" class="no-print font-mono text-xs px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">Print handover</button>
+    <div id="unitBadge" class="font-mono text-xs px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">STANDARD &middot; &deg;C &middot; mph</div>
+  </div>
 </div>
+
+<!-- FAVOURITES QUICK ROW -->
+<div id="favouritesRow" class="max-w-6xl mx-auto px-4 sm:px-6 pb-2 flex items-center gap-2 flex-wrap font-mono text-xs no-print"></div>
 
 <!-- CARDS -->
 <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -186,6 +227,8 @@
       <div class="text-right font-mono text-xs space-y-1" style="color:var(--paper-dim)">
         <p>Feels: <span id="feelsLike">&mdash;</span></p>
         <p>Humidity: <span id="humidity">&mdash;</span></p>
+        <p>Visibility: <span id="visibility">&mdash;</span></p>
+        <p>Sun: <span id="sunTimes">&mdash;</span></p>
       </div>
     </div>
   </section>
@@ -231,6 +274,16 @@
         <p class="text-xs mt-1" style="color:var(--paper-dim)">Period (s)</p>
       </div>
     </div>
+    <div class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t" style="border-color:rgba(217,174,104,0.15)">
+      <div>
+        <p id="seaTemp" class="instrument-value text-2xl" style="color:var(--paper)">&mdash;</p>
+        <p class="text-xs mt-1" style="color:var(--paper-dim)">Sea temp</p>
+      </div>
+      <div>
+        <p id="wavePeriod" class="instrument-value text-2xl" style="color:var(--paper)">&mdash;</p>
+        <p class="text-xs mt-1" style="color:var(--paper-dim)">Wave period (s)</p>
+      </div>
+    </div>
     <!-- Paywall overlay for swell period (pro-only) -->
     <div id="swellPaywall" class="hidden absolute inset-0 rounded-md flex items-center justify-center" style="background:rgba(7,26,46,0.55); backdrop-filter:blur(2px);">
       <button id="upgradeBtnSwell" class="upgrade-btn font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Upgrade to Maritime Pro &middot; &pound;3/mo</button>
@@ -268,7 +321,7 @@
         <h2 class="font-display text-lg" style="color:var(--paper)">Crew &amp; Pier Staff Observations</h2>
         <p class="font-mono text-[10px] uppercase tracking-widest mt-0.5" style="color:var(--admiralty-red)">Restricted &middot; Staff Only</p>
       </div>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 07</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 05</span>
     </div>
 
     <!-- Locked state -->
@@ -305,12 +358,29 @@
 
 </main>
 
+<!-- ROUTE PLANNER -->
+<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+  <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-display text-lg" style="color:var(--paper)">Route Planner</h2>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 06</span>
+    </div>
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
+      <select id="routeFrom" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 flex-1"></select>
+      <span class="font-mono text-xs text-center" style="color:var(--brass-light)">&rarr;</span>
+      <select id="routeTo" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 flex-1"></select>
+      <button id="routeCompareBtn" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm shrink-0" style="background:var(--brass); color:var(--navy-deep)">Compare</button>
+    </div>
+    <div id="routeResults" class="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-sm"></div>
+  </div>
+</section>
+
 <!-- LIVE WEATHER MAP -->
 <section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">Live Weather Map</h2>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 05</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 07</span>
     </div>
     <div id="weatherMap" class="rounded-sm overflow-hidden" style="aspect-ratio: 16 / 9; border:1px solid rgba(217,174,104,0.25);"></div>
     <div class="flex items-center justify-between mt-2">
@@ -325,7 +395,7 @@
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">5-Day Forecast</h2>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 06</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 08</span>
     </div>
     <div id="forecastRow" class="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs"></div>
   </div>
