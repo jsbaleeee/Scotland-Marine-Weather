@@ -4,12 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PortCast</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B2540">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase-config.js"></script>
 <style>
   :root{
     --navy:#0B2540;
@@ -196,6 +202,7 @@
 
       <button id="themeToggle" aria-label="Toggle light or dark theme" class="font-mono text-xs px-2 py-1 rounded-sm border no-print" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)" title="Toggle light/dark">&#9788;</button>
       <span id="companyIndicator" class="no-print font-mono text-xs"></span>
+      <button id="installAppBtn" class="hidden no-print font-mono text-xs px-2 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">Install app</button>
     </div>
   </div>
 </nav>
@@ -329,7 +336,7 @@
   </section>
 
   <!-- CARD: Crew / Pier Staff Observations (restricted) -->
-  <section class="chart-card chart-corner-bl chart-corner-br rounded-md p-5 relative md:col-span-2">
+  <section class="pro-only-panel chart-card chart-corner-bl chart-corner-br rounded-md p-5 relative md:col-span-2">
     <div class="flex items-center justify-between mb-4">
       <div>
         <h2 class="font-display text-lg" style="color:var(--paper)">Observations</h2>
@@ -365,6 +372,7 @@
         <input id="crewNoteText" type="text" maxlength="200" placeholder="e.g. Strong cross-current at slipway on approach" required
           class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--brass-light)]">
         <button type="submit" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Post</button>
+        <input id="crewNotePhoto" type="file" accept="image/*" class="sm:col-span-3 font-mono text-xs" style="color:var(--paper-dim)">
       </form>
 
       <div id="crewNotesList" class="space-y-2"></div>
@@ -378,7 +386,7 @@
 </main>
 
 <!-- CAPTAIN'S NOTES (public — anyone can view or post) -->
-<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+<section class="pro-only-panel max-w-6xl mx-auto px-4 sm:px-6 pb-6">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <div>
@@ -398,6 +406,7 @@
         <input id="captainAuthorName" type="text" placeholder="Your name (optional)" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2">
         <input id="captainNoteText" type="text" maxlength="280" placeholder="e.g. Calm crossing today, dolphins off the bow!" required class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2">
         <button type="submit" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Post</button>
+        <input id="captainNotePhoto" type="file" accept="image/*" class="sm:col-span-3 font-mono text-xs" style="color:var(--paper-dim)">
       </form>
       <div id="captainNotesList" class="space-y-2"></div>
       <p id="captainNotesEmpty" class="hidden font-mono text-xs" style="color:var(--paper-dim)">No notes posted yet for this company.</p>
@@ -410,7 +419,7 @@
 </section>
 
 <!-- NETWORK OVERVIEW -->
-<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+<section class="pro-only-panel max-w-6xl mx-auto px-4 sm:px-6 pb-6">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">Network Overview</h2>
@@ -423,7 +432,7 @@
 </section>
 
 <!-- VESSEL TRAFFIC (AIS) -->
-<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+<section class="pro-only-panel max-w-6xl mx-auto px-4 sm:px-6 pb-6">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">Vessel Traffic (AIS)</h2>
@@ -435,7 +444,7 @@
 </section>
 
 <!-- ROUTE PLANNER -->
-<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+<section class="pro-only-panel max-w-6xl mx-auto px-4 sm:px-6 pb-6">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">Route Planner</h2>

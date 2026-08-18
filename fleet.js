@@ -1,13 +1,8 @@
 /* ==========================================================================
    PortCast — Fleet Registry
+   Supabase config now lives in ONE place: supabase-config.js (loaded via
+   <script> before this file in fleet.html).
    ========================================================================== */
-const SUPABASE_URL = ""; // <-- same value as in app.js
-const SUPABASE_ANON_KEY = ""; // <-- same value as in app.js
-
-let supabaseClient = null;
-if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-}
 
 const $ = (id) => document.getElementById(id);
 let companyId = null;

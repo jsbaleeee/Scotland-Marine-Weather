@@ -604,6 +604,15 @@ function setProView(on) {
     ? `PRO MARITIME · °F · kn`
     : `STANDARD · °C · mph`;
 
+  // Pro view reveals the heavier panels (Observations, Captain's Notes,
+  // Network Overview, Vessel Traffic/AIS, Route Planner) — Standard keeps
+  // it to core weather/tide/forecast so a first-time user isn't faced
+  // with 10 panels at once.
+  document.querySelectorAll(".pro-only-panel").forEach((el) => {
+    el.classList.toggle("hidden", !on);
+  });
+  if (on && !aisMap) updateAis(PORTS[state.port].lat, PORTS[state.port].lon);
+
   // Re-render with current cached data under new units, if we have it
   if (state.lastData) {
     renderWeather(state.lastData.weather);
@@ -653,7 +662,7 @@ async function loadPort(key) {
 
   renderTide(port.lat, port.lon);
   updateFavouriteStar();
-  await updateAis(port.lat, port.lon);
+  if (state.proView) await updateAis(port.lat, port.lon); // Standard view skips this — saves a live connection nobody's looking at
   if (isCrewUnlocked()) renderCrewNotes();
 }
 
@@ -672,22 +681,10 @@ const CREW_ACCESS_CODE = "PIER2026"; // DEMO ONLY — replace with real auth in 
 const CREW_SESSION_KEY = "smw_crew_unlocked";
 const CREW_NOTES_KEY = "smw_crew_notes"; // { [portKey]: [{ id, category, text, time }] } — fallback only
 
-/* ---------- Supabase (real shared database) ------------------------------
-   Fill these in once you've created your Supabase project (see
-   supabase-schema.sql for the table to set up first):
-     1. supabase.com → New project
-     2. Project Settings → API → copy "Project URL" and "anon public" key
-     3. Paste both below
-   Until both are filled in, observations fall back to this browser's
-   localStorage only (today's demo behaviour) — nothing breaks either way. */
-const SUPABASE_URL = ""; // <-- e.g. https://xxxxxxxx.supabase.co
-const SUPABASE_ANON_KEY = ""; // <-- the "anon public" key, not the service key
-
-let supabaseClient = null;
-if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-}
-const isDbConfigured = () => supabaseClient !== null;
+/* Supabase config now lives in ONE place: supabase-config.js (loaded via
+   <script> before this file in index.html). SUPABASE_URL, SUPABASE_ANON_KEY,
+   supabaseClient, and isDbConfigured() are all defined there — set them up
+   once and every page (dashboard, admin, login, fleet) picks them up. */
 
 /* ---------- Company session (multi-tenant) --------------------------------
    Each authenticated user belongs to exactly one company (see
@@ -695,11 +692,13 @@ const isDbConfigured = () => supabaseClient !== null;
    write a row that needs a company_id — reads are filtered automatically
    by Postgres RLS, so we don't need to filter by company_id ourselves. */
 let currentCompany = null; // { id, name } once resolved, else null
+let currentUserEmail = null; // set alongside currentCompany, for attribution
 
 async function resolveCompanySession() {
   if (!isDbConfigured()) return null;
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session) return null;
+  currentUserEmail = session.user.email;
 
   const { data, error } = await supabaseClient
     .from("company_members")
@@ -709,6 +708,16 @@ async function resolveCompanySession() {
   if (error || !data) return null;
 
   return { id: data.company_id, name: data.companies.name };
+}
+
+/* ---------- Shared photo upload helper (Observations + Captain's Notes) --- */
+async function uploadNotePhoto(file) {
+  if (!file || !isDbConfigured()) return null;
+  const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+  const { error } = await supabaseClient.storage.from("portcast-photos").upload(path, file);
+  if (error) { console.error("Photo upload failed:", error.message); return null; }
+  const { data } = supabaseClient.storage.from("portcast-photos").getPublicUrl(path);
+  return data.publicUrl;
 }
 
 function isCrewUnlocked() {
@@ -735,6 +744,7 @@ async function fetchCrewNotesForPort(portKey) {
     return data.map((row) => ({
       id: row.id, category: row.category, text: row.note_text,
       time: row.created_at, confirms: row.confirms,
+      photoUrl: row.photo_url, postedBy: row.posted_by,
     }));
   }
   return (loadCrewNotesLocal()[portKey] || []);
@@ -743,7 +753,8 @@ async function fetchCrewNotesForPort(portKey) {
 async function saveCrewNote(portKey, note) {
   if (isDbConfigured() && currentCompany) {
     const { error } = await supabaseClient.from("observations").insert({
-      company_id: currentCompany.id, port: portKey, category: note.category, note_text: note.text, confirms: 0,
+      company_id: currentCompany.id, port: portKey, category: note.category, note_text: note.text,
+      confirms: 0, photo_url: note.photoUrl || null, posted_by: currentUserEmail || null,
     });
     if (error) console.error("Supabase write error:", error.message);
     return;
@@ -789,7 +800,10 @@ async function renderCrewNotes() {
     row.style.borderColor = "var(--brass)";
     row.innerHTML = `
       <span class="shrink-0 px-2 py-0.5 rounded-sm" style="background:rgba(111,168,160,0.15); color:var(--seafoam)">${n.category}</span>
-      <span style="color:var(--paper)" class="flex-1">${n.text}</span>
+      <span style="color:var(--paper)" class="flex-1">
+        ${n.text}${n.postedBy ? ` <span style="color:var(--paper-dim)">— ${n.postedBy}</span>` : ""}
+        ${n.photoUrl ? `<br><a href="${n.photoUrl}" target="_blank"><img src="${n.photoUrl}" class="mt-1 rounded-sm" style="max-height:80px"></a>` : ""}
+      </span>
       <span style="color:var(--paper-dim)" class="shrink-0">${new Date(n.time).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
       <button data-note-id="${n.id}" data-confirms="${n.confirms || 0}" class="confirm-note-btn shrink-0 px-2 py-0.5 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">&#10003; ${n.confirms || 0}</button>
     `;
@@ -819,13 +833,17 @@ async function initCrewPanel() {
     e.preventDefault();
     const text = $("crewNoteText").value.trim();
     if (!text) return;
+    const photoFile = $("crewNotePhoto").files[0];
+    const photoUrl = photoFile ? await uploadNotePhoto(photoFile) : null;
     await saveCrewNote(state.port, {
       id: Date.now(),
       category: $("crewCategory").value,
       text,
       time: new Date().toISOString(),
+      photoUrl,
     });
     $("crewNoteText").value = "";
+    $("crewNotePhoto").value = "";
     await renderCrewNotes();
   });
 
@@ -1016,7 +1034,8 @@ function connectAisStream(lat, lon) {
       const mmsi = meta.MMSI;
       const shipName = (meta.ShipName || `MMSI ${mmsi}`).trim();
       const latLng = [pr.Latitude, pr.Longitude];
-      const popup = `<strong>${shipName}</strong><br>Speed: ${pr.Sog ?? "—"} kn<br>Course: ${pr.Cog ?? "—"}°`;
+      const status = (pr.Sog != null) ? (pr.Sog < 0.5 ? "At berth / anchored" : "Underway") : "—";
+      const popup = `<strong>${shipName}</strong><br>${status}<br>Speed: ${pr.Sog ?? "—"} kn<br>Course: ${pr.Cog ?? "—"}°`;
 
       if (aisMarkers.has(mmsi)) {
         aisMarkers.get(mmsi).setLatLng(latLng).setPopupContent(popup);
@@ -1072,7 +1091,10 @@ async function renderCaptainNotes(companyId) {
     row.className = "font-mono text-xs flex items-start gap-3 border-l-2 pl-3 py-1";
     row.style.borderColor = "var(--seafoam)";
     row.innerHTML = `
-      <span style="color:var(--paper)" class="flex-1">${n.note_text}${n.author_name ? ` <span style="color:var(--paper-dim)">— ${n.author_name}</span>` : ""}</span>
+      <span style="color:var(--paper)" class="flex-1">
+        ${n.note_text}${n.author_name ? ` <span style="color:var(--paper-dim)">— ${n.author_name}</span>` : ""}
+        ${n.photo_url ? `<br><a href="${n.photo_url}" target="_blank"><img src="${n.photo_url}" class="mt-1 rounded-sm" style="max-height:80px"></a>` : ""}
+      </span>
       <span style="color:var(--paper-dim)" class="shrink-0">${new Date(n.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
     `;
     list.appendChild(row);
@@ -1098,17 +1120,51 @@ function initCaptainNotes() {
     const companyId = $("captainNotesCompany").value;
     const text = $("captainNoteText").value.trim();
     if (!companyId || !text) return;
+    const photoFile = $("captainNotePhoto").files[0];
+    const photoUrl = photoFile ? await uploadNotePhoto(photoFile) : null;
 
     const { error } = await supabaseClient.from("captain_notes").insert({
       company_id: companyId,
       author_name: $("captainAuthorName").value.trim() || null,
       note_text: text,
+      photo_url: photoUrl,
     });
     if (error) { alert("Couldn't post: " + error.message); return; }
 
     $("captainNoteText").value = "";
+    $("captainNotePhoto").value = "";
     await renderCaptainNotes(companyId);
   });
+}
+
+/* ==========================================================================
+   19) PWA — service worker registration + install prompt
+   ========================================================================== */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js").catch(() => { /* non-critical */ });
+  });
+}
+
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = $("installAppBtn");
+  if (btn) btn.classList.remove("hidden");
+});
+
+function initInstallPrompt() {
+  const btn = $("installAppBtn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    btn.classList.add("hidden");
+  });
+  window.addEventListener("appinstalled", () => btn.classList.add("hidden"));
 }
 
 /* ==========================================================================
@@ -1261,6 +1317,7 @@ async function initApp() {
   renderCompanyIndicator();
   await initCrewPanel();
   initCaptainNotes();
+  initInstallPrompt();
   await loadPort(state.port);
 }
 

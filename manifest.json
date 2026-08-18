@@ -1,0 +1,15 @@
+{
+  "name": "PortCast — Scottish Marine Weather",
+  "short_name": "PortCast",
+  "description": "Live marine weather, tides, AIS, and observations for Scottish ports.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0B2540",
+  "theme_color": "#0B2540",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

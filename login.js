@@ -1,15 +1,8 @@
 /* ==========================================================================
    PortCast — Company login / signup
-   Keep SUPABASE_URL / SUPABASE_ANON_KEY identical across app.js, admin.js,
-   login.js, and fleet.js.
+   Supabase config now lives in ONE place: supabase-config.js (loaded via
+   <script> before this file in login.html).
    ========================================================================== */
-const SUPABASE_URL = ""; // <-- same value as in app.js
-const SUPABASE_ANON_KEY = ""; // <-- same value as in app.js
-
-let supabaseClient = null;
-if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-}
 
 const $ = (id) => document.getElementById(id);
 let mode = "login"; // "login" | "signup"

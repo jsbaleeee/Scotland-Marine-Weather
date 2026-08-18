@@ -2,17 +2,9 @@
    PortCast — Observations Admin
    Shows every observation for YOUR company across every port. Requires a
    real login (same Supabase account as the main dashboard) — no PIN here.
-   Keep SUPABASE_URL / SUPABASE_ANON_KEY identical across app.js, admin.js,
-   login.js, and fleet.js.
+   Supabase config now lives in ONE place: supabase-config.js (loaded via
+   <script> before this file in admin.html).
    ========================================================================== */
-const SUPABASE_URL = ""; // <-- same value as in app.js
-const SUPABASE_ANON_KEY = ""; // <-- same value as in app.js
-
-let supabaseClient = null;
-if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-}
-const isDbConfigured = () => supabaseClient !== null;
 
 const PORT_NAMES = {
   lerwick: "Lerwick", kirkwall: "Kirkwall", aberdeen: "Aberdeen",
