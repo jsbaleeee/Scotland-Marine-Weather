@@ -162,18 +162,113 @@ function compassFromDegrees(deg) {
 }
 
 /* ==========================================================================
-   2) UK TIDE DATA (Environment Agency flood-monitoring API)
+   2) UK TIDE DATA — ADMIRALTY UK Tidal API (Discovery tier, free) as primary,
+      EA flood-monitoring gauge readings as fallback
    --------------------------------------------------------------------------
-   Note: the EA "real-time flood-monitoring" API (environment.data.gov.uk)
-   publishes live tidal-level GAUGE READINGS for coastal stations — it does
-   NOT publish official predicted high/low tide TIMES. For fully predicted
-   tide tables (the kind harbourmasters use) you need the UK Hydrographic
-   Office's Admiralty UK Tidal API, which requires a (free-tier available)
-   subscription key: https://admiraltyapi.portal.azure-api.net/
-   This module uses the open EA gauge data to show the latest recorded
-   level and short-term trend, and is written so the Admiralty API can be
-   swapped in later (see fetchAdmiraltyTide stub below) once you have a key.
+   The Admiralty Discovery tier gives genuine OFFICIAL PREDICTED high/low
+   tide events (current + 6 days) for 607 UK stations, completely free —
+   just needs a subscription key: https://admiraltyapi.portal.azure-api.net/
+   (choose "UK Tidal API - Discovery" when creating a product/subscription).
+
+   IMPORTANT LICENSING NOTE: the Discovery tier's terms explicitly prohibit
+   caching/storing the returned data (it's Crown copyright). So unlike the
+   weather/marine data elsewhere in this app, tide predictions are NEVER
+   written to localStorage — they're used in-memory only, for the current
+   page view, and simply show as unavailable if offline. Don't change this
+   without re-checking Admiralty's current terms.
+
+   Falls back to the EA gauge-reading approach (live level + trend, not
+   predicted times) if no Admiralty key is set, or if the Admiralty call
+   fails for any reason — so tide status still degrades gracefully rather
+   than going blank.
    ========================================================================== */
+const ADMIRALTY_API_KEY = ""; // <-- paste your free Discovery-tier subscription key
+const ADMIRALTY_BASE = "https://admiraltyapi.azure-api.net/uktidalapi/api/V1";
+
+// In-memory only (see licensing note above) — holds the station list for
+// the current page session so we don't re-fetch it on every port switch.
+let admiraltyStationsCache = null;
+
+async function loadAdmiraltyStations() {
+  if (admiraltyStationsCache) return admiraltyStationsCache;
+  const res = await fetch(`${ADMIRALTY_BASE}/Stations/`, {
+    headers: { "Ocp-Apim-Subscription-Key": ADMIRALTY_API_KEY },
+  });
+  if (!res.ok) throw new Error("Admiralty station list fetch failed");
+  const geojson = await res.json();
+  admiraltyStationsCache = (geojson.features || []).map((f) => ({
+    id: f.properties.Id,
+    name: f.properties.Name,
+    lon: f.geometry.coordinates[0],
+    lat: f.geometry.coordinates[1],
+  }));
+  return admiraltyStationsCache;
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function findNearestAdmiraltyStation(lat, lon) {
+  const stations = await loadAdmiraltyStations();
+  let nearest = null, nearestDist = Infinity;
+  for (const s of stations) {
+    const d = haversineKm(lat, lon, s.lat, s.lon);
+    if (d < nearestDist) { nearest = s; nearestDist = d; }
+  }
+  return nearest;
+}
+
+async function fetchAdmiraltyTideStatus(lat, lon) {
+  if (!ADMIRALTY_API_KEY) return { available: false, reason: "Admiralty API not configured" };
+
+  const station = await findNearestAdmiraltyStation(lat, lon);
+  if (!station) return { available: false, reason: "No Admiralty station found nearby" };
+
+  const res = await fetch(`${ADMIRALTY_BASE}/Stations/${station.id}/TidalEvents?duration=2`, {
+    headers: { "Ocp-Apim-Subscription-Key": ADMIRALTY_API_KEY },
+  });
+  if (!res.ok) throw new Error("Admiralty tidal events fetch failed");
+  const events = await res.json();
+  if (!events || !events.length) return { available: false, reason: "No tidal events returned for this station" };
+
+  const now = new Date();
+  const nextHigh = events.find((e) => e.EventType === "HighWater" && new Date(e.DateTime) > now);
+  const nextLow = events.find((e) => e.EventType === "LowWater" && new Date(e.DateTime) > now);
+  const lastEvent = [...events].reverse().find((e) => new Date(e.DateTime) <= now);
+
+  const trend = lastEvent
+    ? (lastEvent.EventType === "LowWater" ? "Rising" : "Falling")
+    : null;
+
+  // Today's predicted range, from today's high/low event heights.
+  const todayStr = now.toISOString().slice(0, 10);
+  const todaysHeights = events
+    .filter((e) => e.DateTime.slice(0, 10) === todayStr && typeof e.Height === "number")
+    .map((e) => e.Height);
+  const todaysRange = todaysHeights.length >= 2
+    ? Math.max(...todaysHeights) - Math.min(...todaysHeights)
+    : null;
+
+  return {
+    available: true,
+    predicted: true,
+    stationName: station.name,
+    trend,
+    nextHigh: nextHigh ? { time: nextHigh.DateTime, height: nextHigh.Height } : null,
+    nextLow: nextLow ? { time: nextLow.DateTime, height: nextLow.Height } : null,
+    todaysRange,
+  };
+}
+
+/* ---------- EA flood-monitoring gauge readings (fallback) -----------------
+   Live level + short-term trend, NOT predicted times — used only when the
+   Admiralty API isn't configured or its call fails. */
 async function findNearestTidalStation(lat, lon) {
   const url =
     `https://environment.data.gov.uk/flood-monitoring/id/stations` +
@@ -185,14 +280,13 @@ async function findNearestTidalStation(lat, lon) {
 }
 
 async function fetchTidalReadings(stationNoticeUrl) {
-  // stationNoticeUrl looks like .../id/stations/{id}
   const url = `${stationNoticeUrl}/readings?_sorted&_limit=6`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("readings fetch failed");
   return res.json();
 }
 
-async function fetchUkTideStatus(lat, lon) {
+async function fetchEaTideStatus(lat, lon) {
   try {
     const station = await findNearestTidalStation(lat, lon);
     if (!station) return { available: false, reason: "No tidal gauge within range" };
@@ -207,6 +301,7 @@ async function fetchUkTideStatus(lat, lon) {
 
     return {
       available: true,
+      predicted: false,
       stationName: station.label || station.stationReference || "Unnamed station",
       levelMetres: latest.value,
       trend,
@@ -217,11 +312,16 @@ async function fetchUkTideStatus(lat, lon) {
   }
 }
 
-/* Stub for swapping in official predicted tide times once you hold an
-   Admiralty UK Tidal API key. Left unimplemented deliberately — do not
-   call with a hardcoded key from client-side JS; proxy it through your
-   own backend (see server.js) so the key isn't exposed in the browser. */
-// async function fetchAdmiraltyTide(stationId) { /* proxy via your backend */ }
+/* ---------- Combined: try Admiralty first, fall back to EA ---------------- */
+async function fetchUkTideStatus(lat, lon) {
+  try {
+    const admiralty = await fetchAdmiraltyTideStatus(lat, lon);
+    if (admiralty.available) return admiralty;
+  } catch (err) {
+    // fall through to EA below
+  }
+  return fetchEaTideStatus(lat, lon);
+}
 
 /* ==========================================================================
    3) UNIT CONVERSION
@@ -374,12 +474,8 @@ async function renderTide(lat, lon) {
   $("tideStation").textContent = "Locating…";
   $("tideLevel").textContent = "—";
   $("tideTrend").textContent = "—";
+  $("tideRange").textContent = "—";
   $("tideNote").textContent = "";
-
-  const range = TIDAL_RANGES[state.port];
-  $("tideRange").textContent = range != null
-    ? `${range.toFixed(1)} m (springs)`
-    : "— (add via Admiralty Tide Tables)";
 
   const tide = await fetchUkTideStatus(lat, lon);
 
@@ -387,18 +483,32 @@ async function renderTide(lat, lon) {
     $("tideStation").textContent = "Unavailable";
     $("tideLevel").textContent = "—";
     $("tideTrend").textContent = "—";
+    const fallbackRange = TIDAL_RANGES[state.port];
+    $("tideRange").textContent = fallbackRange != null ? `${fallbackRange.toFixed(1)} m (springs)` : "—";
     $("tideNote").textContent = `${tide.reason}. Consult local port authority tide tables.`;
     $("tideTrendIcon").textContent = "–";
     return;
   }
 
   $("tideStation").textContent = tide.stationName;
-  $("tideLevel").textContent = `${tide.levelMetres.toFixed(2)} m`;
-  $("tideTrend").textContent = tide.trend;
+  $("tideTrend").textContent = tide.trend || "—";
   $("tideTrendIcon").textContent = tide.trend === "Rising" ? "↑" : tide.trend === "Falling" ? "↓" : "↔";
-  $("tideNote").textContent =
-    "Live gauge reading (EA tidal network), not an official predicted tide table. " +
-    "For predicted high/low times, check Admiralty EasyTide or your local harbour authority.";
+
+  if (tide.predicted) {
+    // Admiralty path: official predicted events.
+    const fmtEvent = (ev) => ev ? `${new Date(ev.time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} (${ev.height.toFixed(1)}m)` : "—";
+    $("tideLevel").textContent = `Next high ${fmtEvent(tide.nextHigh)} · Next low ${fmtEvent(tide.nextLow)}`;
+    $("tideRange").textContent = tide.todaysRange != null ? `${tide.todaysRange.toFixed(1)} m (today, predicted)` : "—";
+    $("tideNote").textContent = "Official predicted tide events — UK Hydrographic Office (Admiralty).";
+  } else {
+    // EA fallback path: live gauge reading, not predicted.
+    $("tideLevel").textContent = `${tide.levelMetres.toFixed(2)} m`;
+    const fallbackRange = TIDAL_RANGES[state.port];
+    $("tideRange").textContent = fallbackRange != null ? `${fallbackRange.toFixed(1)} m (springs)` : "— (add via Admiralty Tide Tables)";
+    $("tideNote").textContent =
+      "Live gauge reading (EA tidal network), not an official predicted tide table. " +
+      "Add a free Admiralty API key in app.js for predicted high/low times.";
+  }
 }
 
 /* ==========================================================================
