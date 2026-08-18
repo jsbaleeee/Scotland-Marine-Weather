@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PortCast — Observations Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --navy:#0B2540; --navy-deep:#071A2E; --paper:#F1EBDA; --paper-dim:#E5DCC4;
+    --brass:#B8863B; --brass-light:#D9AE68; --admiralty-red:#A8342A; --seafoam:#6FA8A0;
+  }
+  html,body{background:var(--navy); font-family:'IBM Plex Mono',monospace; color:var(--paper);}
+  .font-display{font-family:'Fraunces',serif;}
+  th,td{ border-bottom:1px solid rgba(217,174,104,0.15); padding:0.5rem 0.75rem; text-align:left; }
+  th{ color:var(--brass-light); text-transform:uppercase; font-size:0.65rem; letter-spacing:0.05em; }
+  tr:hover td{ background:rgba(241,235,218,0.03); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<nav class="border-b border-[rgba(217,174,104,0.25)]" style="background:var(--navy-deep);">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+    <p class="font-display text-lg" style="color:var(--paper)">PortCast — Observations Admin</p>
+    <a href="index.html" class="text-xs" style="color:var(--brass-light)">&larr; Back to dashboard</a>
+  </div>
+</nav>
+
+<main class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+
+  <!-- Locked state (populated dynamically by admin.js) -->
+  <div id="adminLocked" class="hidden"></div>
+
+  <!-- Unlocked state -->
+  <div id="adminUnlocked" class="hidden">
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+      <select id="filterPort" class="text-xs bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-2 py-2">
+        <option value="">All ports</option>
+      </select>
+      <select id="filterCategory" class="text-xs bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-2 py-2">
+        <option value="">All categories</option>
+        <option value="Wind">Wind</option>
+        <option value="Weather">Weather</option>
+        <option value="Traffic">Traffic</option>
+        <option value="Hazard">Hazard</option>
+      </select>
+      <button id="refreshBtn" class="text-xs uppercase tracking-wider px-3 py-2 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">Refresh</button>
+      <span id="rowCount" class="text-xs" style="color:var(--paper-dim)"></span>
+    </div>
+
+    <div class="overflow-x-auto rounded-sm" style="border:1px solid rgba(217,174,104,0.2);">
+      <table class="w-full text-xs">
+        <thead><tr>
+          <th>Time</th><th>Port</th><th>Category</th><th>Note</th><th>Confirms</th>
+        </tr></thead>
+        <tbody id="obsTableBody"></tbody>
+      </table>
+    </div>
+    <p id="emptyState" class="hidden text-xs mt-4" style="color:var(--paper-dim)">No observations logged yet.</p>
+  </div>
+
+  <p id="dbStatusNote" class="text-[10px] mt-6" style="color:var(--paper-dim)"></p>
+</main>
+
+<script src="admin.js"></script>
+</body>
+</html>

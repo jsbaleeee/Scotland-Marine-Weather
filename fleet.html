@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PortCast — Fleet Registry</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --navy:#0B2540; --navy-deep:#071A2E; --paper:#F1EBDA; --paper-dim:#E5DCC4;
+    --brass:#B8863B; --brass-light:#D9AE68; --admiralty-red:#A8342A; --seafoam:#6FA8A0;
+  }
+  html,body{background:var(--navy); font-family:'IBM Plex Mono',monospace; color:var(--paper);}
+  .font-display{font-family:'Fraunces',serif;}
+  input{ background:var(--navy); border:1px solid rgba(217,174,104,0.4); color:var(--paper); }
+  th,td{ border-bottom:1px solid rgba(217,174,104,0.15); padding:0.5rem 0.75rem; text-align:left; }
+  th{ color:var(--brass-light); text-transform:uppercase; font-size:0.65rem; letter-spacing:0.05em; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<nav class="border-b border-[rgba(217,174,104,0.25)]" style="background:var(--navy-deep);">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+    <p class="font-display text-lg" style="color:var(--paper)">PortCast — Fleet Registry</p>
+    <a href="index.html" class="text-xs" style="color:var(--brass-light)">&larr; Back to dashboard</a>
+  </div>
+</nav>
+
+<main class="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+
+  <div id="notLoggedIn" class="hidden text-sm">
+    <p style="color:var(--paper-dim)">You need to be logged in to manage your fleet.</p>
+    <a href="login.html" class="inline-block mt-3 text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Log in</a>
+  </div>
+
+  <div id="fleetContent" class="hidden">
+    <p id="companyLabel" class="text-xs mb-4" style="color:var(--seafoam)"></p>
+
+    <form id="addVesselForm" class="grid grid-cols-1 sm:grid-cols-[1fr_10rem_auto] gap-2 mb-6">
+      <input id="vesselName" type="text" placeholder="Vessel name" required class="rounded-sm px-3 py-2 text-sm">
+      <input id="vesselMmsi" type="text" placeholder="MMSI" required pattern="[0-9]{9}" title="9-digit MMSI number" class="rounded-sm px-3 py-2 text-sm">
+      <button type="submit" class="text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Add vessel</button>
+    </form>
+
+    <div class="overflow-x-auto rounded-sm" style="border:1px solid rgba(217,174,104,0.2);">
+      <table class="w-full text-xs">
+        <thead><tr><th>Vessel</th><th>MMSI</th><th></th></tr></thead>
+        <tbody id="vesselTableBody"></tbody>
+      </table>
+    </div>
+    <p id="emptyState" class="hidden text-xs mt-4" style="color:var(--paper-dim)">No vessels added yet — add your fleet above to enable AIS tracking on the dashboard.</p>
+
+    <p class="text-[10px] mt-6" style="color:var(--paper-dim)">
+      Find a vessel's MMSI via its AIS transponder documentation, or look it up on a public AIS registry site using the vessel name.
+      Once added here, the dashboard's Vessel Traffic panel will track these specific vessels wherever they are, instead of just showing general traffic near a port.
+    </p>
+  </div>
+</main>
+
+<script src="fleet.js"></script>
+</body>
+</html>

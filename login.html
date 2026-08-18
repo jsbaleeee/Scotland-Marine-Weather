@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PortCast — Company Login</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --navy:#0B2540; --navy-deep:#071A2E; --paper:#F1EBDA; --paper-dim:#E5DCC4;
+    --brass:#B8863B; --brass-light:#D9AE68; --admiralty-red:#A8342A; --seafoam:#6FA8A0;
+  }
+  html,body{background:var(--navy); font-family:'Inter',sans-serif; color:var(--paper); min-height:100vh;}
+  .font-display{font-family:'Fraunces',serif;}
+  .font-mono{font-family:'IBM Plex Mono',monospace;}
+  input, select{ background:var(--navy); border:1px solid rgba(217,174,104,0.4); color:var(--paper); }
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center px-4">
+
+<div class="w-full max-w-sm">
+  <p class="font-display text-2xl text-center mb-1" style="color:var(--paper)">PortCast</p>
+  <p class="font-mono text-xs text-center mb-8" style="color:var(--brass-light)">Company sign-in</p>
+
+  <div id="notConfigured" class="hidden font-mono text-xs p-4 rounded-sm border" style="border-color:var(--admiralty-red); color:#F3C9C4">
+    No database is connected yet — add your Supabase URL/key to app.js, login.js and admin.js first.
+  </div>
+
+  <div id="authForm" class="space-y-3">
+    <div class="flex rounded-sm overflow-hidden border" style="border-color:rgba(217,174,104,0.4)">
+      <button id="tabLogin" class="flex-1 py-2 font-mono text-xs uppercase" style="background:var(--brass); color:var(--navy-deep)">Log in</button>
+      <button id="tabSignup" class="flex-1 py-2 font-mono text-xs uppercase" style="color:var(--brass-light)">New company</button>
+    </div>
+
+    <input id="email" type="email" placeholder="Email" class="w-full rounded-sm px-3 py-2 text-sm">
+    <input id="password" type="password" placeholder="Password" class="w-full rounded-sm px-3 py-2 text-sm">
+    <input id="companyName" type="text" placeholder="Company name (e.g. Tiree Sea Tours)" class="hidden w-full rounded-sm px-3 py-2 text-sm">
+
+    <button id="submitBtn" class="w-full font-mono text-xs uppercase tracking-wider px-4 py-3 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Log in</button>
+
+    <p id="authMessage" class="font-mono text-xs text-center" style="color:var(--paper-dim)"></p>
+  </div>
+
+  <a href="index.html" class="block text-center font-mono text-xs mt-6" style="color:var(--brass-light)">&larr; Back to dashboard</a>
+</div>
+
+<script src="login.js"></script>
+</body>
+</html>

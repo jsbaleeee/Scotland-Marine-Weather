@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
     --navy:#0B2540;
@@ -194,6 +195,7 @@
       </div>
 
       <button id="themeToggle" aria-label="Toggle light or dark theme" class="font-mono text-xs px-2 py-1 rounded-sm border no-print" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)" title="Toggle light/dark">&#9788;</button>
+      <span id="companyIndicator" class="no-print font-mono text-xs"></span>
     </div>
   </div>
 </nav>
@@ -335,9 +337,16 @@
       </div>
       <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 05</span>
     </div>
+    <a href="admin.html" class="no-print block mb-3 text-right font-mono text-[10px] uppercase tracking-wider" style="color:var(--seafoam)">Open full observations admin view &rarr;</a>
 
-    <!-- Locked state -->
-    <div id="crewLocked" class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+    <!-- Login prompt (real-auth path, when a database is connected) -->
+    <div id="crewLoginPrompt" class="hidden">
+      <p class="font-mono text-sm mb-3" style="color:var(--paper-dim)">Log in with your company account to view and add observations.</p>
+      <a href="login.html" class="inline-block font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Log in</a>
+    </div>
+
+    <!-- Locked state (demo-mode PIN fallback, only used before a database is connected) -->
+    <div id="crewLocked" class="hidden flex flex-col sm:flex-row items-start sm:items-center gap-3">
       <input id="crewCodeInput" type="password" aria-label="Staff access code" placeholder="Enter staff access code" autocomplete="off"
         class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--brass-light)] w-full sm:w-56">
       <button id="crewUnlockBtn" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm shrink-0" style="background:var(--brass); color:var(--navy-deep)">Unlock crew view</button>
@@ -363,20 +372,49 @@
       <button id="exportCrewCsvBtn" class="mt-3 font-mono text-[10px] uppercase tracking-wider px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">Export CSV</button>
     </div>
 
-    <p class="font-mono text-[10px] mt-4" style="color:var(--paper-dim)">
-      Demo only: entries are stored in this browser's local storage, not shared across devices. A production
-      version would sync entries via a real backend so every vessel's bridge sees the same live feed.
-    </p>
+    <p id="dbStatusNote" class="font-mono text-[10px] mt-4" style="color:var(--paper-dim)"></p>
   </section>
 
 </main>
+
+<!-- CAPTAIN'S NOTES (public — anyone can view or post) -->
+<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+  <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="font-display text-lg" style="color:var(--paper)">Captain's Notes</h2>
+        <p class="font-mono text-[10px] uppercase tracking-widest mt-0.5" style="color:var(--seafoam)">Public &middot; Anyone can view or post</p>
+      </div>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 06</span>
+    </div>
+
+    <select id="captainNotesCompany" aria-label="Select company" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 mb-4 w-full sm:w-auto">
+      <option value="">Select a company&hellip;</option>
+    </select>
+    <p id="captainNotesNotConfigured" class="hidden font-mono text-xs mb-4" style="color:var(--paper-dim)">Needs a database connected first (see app.js).</p>
+
+    <div id="captainNotesArea" class="hidden">
+      <form id="captainNoteForm" class="grid grid-cols-1 sm:grid-cols-[8rem_1fr_auto] gap-2 mb-4">
+        <input id="captainAuthorName" type="text" placeholder="Your name (optional)" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2">
+        <input id="captainNoteText" type="text" maxlength="280" placeholder="e.g. Calm crossing today, dolphins off the bow!" required class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2">
+        <button type="submit" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Post</button>
+      </form>
+      <div id="captainNotesList" class="space-y-2"></div>
+      <p id="captainNotesEmpty" class="hidden font-mono text-xs" style="color:var(--paper-dim)">No notes posted yet for this company.</p>
+    </div>
+
+    <p class="font-mono text-[10px] mt-4" style="color:var(--paper-dim)">
+      Open by design — no login needed to read or post. Good fit for informal, customer-facing updates from a small operator; not a substitute for the restricted Observations panel above for anything operationally sensitive.
+    </p>
+  </div>
+</section>
 
 <!-- NETWORK OVERVIEW -->
 <section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">Network Overview</h2>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 06</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 07</span>
     </div>
     <button id="overviewLoadBtn" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm mb-4" style="background:var(--brass); color:var(--navy-deep)">Load network overview</button>
     <div id="overviewGrid" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2"></div>
@@ -389,7 +427,7 @@
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">Vessel Traffic (AIS)</h2>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 07</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 08</span>
     </div>
     <div id="aisMap" class="rounded-sm overflow-hidden" style="aspect-ratio: 16 / 9; border:1px solid rgba(217,174,104,0.25);"></div>
     <p id="aisStatus" class="font-mono text-[10px] mt-2" style="color:var(--paper-dim)">AIS not configured — see app.js</p>
@@ -401,7 +439,7 @@
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">Route Planner</h2>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 08</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 09</span>
     </div>
     <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
       <select id="routeFrom" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 flex-1"></select>
@@ -418,7 +456,7 @@
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
       <h2 class="font-display text-lg" style="color:var(--paper)">5-Day Forecast</h2>
-      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 09</span>
+      <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 10</span>
     </div>
     <div id="forecastRow" class="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs"></div>
   </div>
