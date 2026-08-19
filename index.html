@@ -85,6 +85,27 @@
     background:linear-gradient(180deg, rgba(20,32,43,0.03), rgba(20,32,43,0.01));
   }
 
+  /* ---------- Outdoor / sunlight readability mode ---------- */
+  [data-contrast="high"]{
+    --navy:#000000;
+    --navy-deep:#000000;
+    --paper:#FFFFFF;
+    --paper-dim:#F0F0F0;
+    --brass:#FFD700;
+    --brass-light:#FFD700;
+    --seafoam:#7FFFD4;
+    --admiralty-red:#FF5C4D;
+  }
+  [data-contrast="high"] body{ font-weight:600; }
+  [data-contrast="high"] .chart-card{
+    border-width:2px !important;
+    background:rgba(255,255,255,0.04);
+  }
+  [data-contrast="high"] .instrument-value{ font-weight:700; }
+  [data-contrast="high"] .badge-green{ background:#0A3D0A; color:#7FFF7F; border-color:#7FFF7F; }
+  [data-contrast="high"] .badge-amber{ background:#3D2E00; color:#FFD700; border-color:#FFD700; }
+  [data-contrast="high"] .badge-red{ background:#3D0A0A; color:#FF5C4D; border-color:#FF5C4D; }
+
   .favourite-star{ cursor:pointer; user-select:none; transition:transform .15s ease; }
   .favourite-star:hover{ transform:scale(1.15); }
   .favourite-star.active{ color:var(--brass-light); }
@@ -107,6 +128,21 @@
 </head>
 <body class="min-h-screen">
 
+<!-- FIRST-TIME WALKTHROUGH -->
+<div id="introModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(7,26,46,0.85)">
+  <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-6 max-w-sm w-full">
+    <p class="font-display text-xl mb-3" style="color:var(--paper)">Welcome to PortCast</p>
+    <ul class="font-mono text-xs space-y-2 mb-5" style="color:var(--paper-dim)">
+      <li>📍 <strong style="color:var(--paper)">Pick a port</strong> from the dropdown, or tap the location icon to find your nearest one.</li>
+      <li>⚙️ <strong style="color:var(--paper)">Standard / Pro toggle</strong> — Standard keeps it simple; Pro reveals AIS tracking, route planning, and more.</li>
+      <li>☀️ <strong style="color:var(--paper)">The sun icon</strong> switches to a high-contrast mode for reading outdoors in bright light.</li>
+      <li>⭐ <strong style="color:var(--paper)">Star a port</strong> to save it as a favourite for quick access.</li>
+    </ul>
+    <button id="introDismissBtn" class="w-full font-mono text-xs uppercase tracking-wider px-4 py-3 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Got it — let's go</button>
+  </div>
+</div>
+
+
 <!-- NAVBAR -->
 <nav class="sticky top-0 z-40 border-b border-[rgba(217,174,104,0.25)]" style="background:var(--navy-deep);">
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -125,6 +161,7 @@
       <!-- Location Selector + Favourite -->
       <div class="flex items-center gap-2">
         <span id="favouriteStar" class="favourite-star text-xl" title="Save as favourite" role="button" tabindex="0" aria-label="Toggle favourite port">&#9733;</span>
+        <button id="useLocationBtn" class="favourite-star text-base" title="Use my location" aria-label="Find nearest port to my location">&#128205;</button>
         <div class="relative">
         <select id="portSelect" aria-label="Select port" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm pl-3 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-[var(--brass-light)] cursor-pointer max-w-[11rem] sm:max-w-none">
           <optgroup label="Weather stations">
@@ -201,11 +238,20 @@
       </div>
 
       <button id="themeToggle" aria-label="Toggle light or dark theme" class="font-mono text-xs px-2 py-1 rounded-sm border no-print" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)" title="Toggle light/dark">&#9788;</button>
+      <button id="contrastToggle" aria-label="Toggle high-contrast outdoor mode" class="font-mono text-xs px-2 py-1 rounded-sm border no-print" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)" title="High-contrast outdoor mode">&#9728;&#65039;</button>
       <span id="companyIndicator" class="no-print font-mono text-xs"></span>
       <button id="installAppBtn" class="hidden no-print font-mono text-xs px-2 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">Install app</button>
     </div>
   </div>
 </nav>
+
+<!-- SITE ANNOUNCEMENT BANNER -->
+<div id="announcementBanner" class="hidden max-w-6xl mx-auto px-4 sm:px-6 pt-4">
+  <div class="rounded-sm px-4 py-3 flex items-start justify-between gap-3 font-mono text-xs" style="background:rgba(217,174,104,0.12); border:1px solid rgba(217,174,104,0.4); color:var(--paper)">
+    <span id="announcementText"></span>
+    <button id="announcementDismiss" class="shrink-0" aria-label="Dismiss announcement" style="color:var(--brass-light)">&times;</button>
+  </div>
+</div>
 
 <!-- STATUS BAR -->
 <div class="max-w-6xl mx-auto px-4 sm:px-6 pt-6 pb-2 flex items-center justify-between flex-wrap gap-2">
@@ -219,12 +265,20 @@
   </div>
   <div class="flex items-center gap-2">
     <button id="printHandoverBtn" aria-label="Print handover summary" class="no-print font-mono text-xs px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">Print handover</button>
+    <button id="shareConditionsBtn" aria-label="Share current conditions" class="no-print font-mono text-xs px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">Share</button>
     <div id="unitBadge" class="font-mono text-xs px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">STANDARD &middot; &deg;C &middot; mph</div>
   </div>
 </div>
 
 <!-- FAVOURITES QUICK ROW -->
 <div id="favouritesRow" class="max-w-6xl mx-auto px-4 sm:px-6 pb-2 flex items-center gap-2 flex-wrap font-mono text-xs no-print"></div>
+
+<!-- LOCAL KNOWLEDGE — editable in-app via admin.html, not code -->
+<div id="localKnowledge" class="hidden max-w-6xl mx-auto px-4 sm:px-6 pb-2">
+  <div class="rounded-sm px-4 py-3 font-mono text-xs" style="background:rgba(111,168,160,0.08); border-left:2px solid var(--seafoam)">
+    <span style="color:var(--seafoam)">⚓ Local knowledge:</span> <span id="localKnowledgeText" style="color:var(--paper)"></span>
+  </div>
+</div>
 
 <!-- CARDS -->
 <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -246,6 +300,7 @@
         <p>Visibility: <span id="visibility">&mdash;</span></p>
         <p>Fog risk: <span id="fogRisk">&mdash;</span></p>
         <p>Sun: <span id="sunTimes">&mdash;</span></p>
+        <p>Vs last year: <span id="historicalCompare">&mdash;</span></p>
       </div>
     </div>
   </section>
@@ -272,6 +327,12 @@
     <div class="mt-4 pt-3 border-t" style="border-color:rgba(217,174,104,0.15)">
       <p class="font-mono text-[10px] uppercase tracking-widest mb-2" style="color:var(--paper-dim)">Next 8 hours — gusts</p>
       <div id="gustTimingRow" class="flex gap-2 overflow-x-auto"></div>
+    </div>
+    <div class="mt-4 pt-3 border-t flex items-center gap-2 flex-wrap" style="border-color:rgba(217,174,104,0.15)">
+      <button id="gustAlertSubscribeBtn" class="font-mono text-[10px] uppercase tracking-wider px-3 py-1 rounded-sm border" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)">🔔 Alert me above</button>
+      <input id="gustAlertThreshold" type="number" value="30" min="5" max="80" class="w-16 font-mono text-xs bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-2 py-1">
+      <span class="font-mono text-[10px]" style="color:var(--paper-dim)" id="gustAlertUnitLabel">mph gusts, this port</span>
+      <span id="gustAlertStatus" class="font-mono text-[10px]" style="color:var(--seafoam)"></span>
     </div>
   </section>
 
@@ -403,6 +464,7 @@
 
     <div id="captainNotesArea" class="hidden">
       <form id="captainNoteForm" class="grid grid-cols-1 sm:grid-cols-[8rem_1fr_auto] gap-2 mb-4">
+        <input id="captainWebsite" type="text" name="website" autocomplete="off" tabindex="-1" class="hidden" aria-hidden="true">
         <input id="captainAuthorName" type="text" placeholder="Your name (optional)" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2">
         <input id="captainNoteText" type="text" maxlength="280" placeholder="e.g. Calm crossing today, dolphins off the bow!" required class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2">
         <button type="submit" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Post</button>
@@ -471,6 +533,17 @@
   </div>
 </section>
 
+<!-- FOR COMPANIES — signup call-to-action -->
+<section class="max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+  <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-6 text-center sm:text-left sm:flex sm:items-center sm:justify-between gap-6">
+    <div>
+      <p class="font-display text-xl mb-1" style="color:var(--paper)">Running a fleet or a pier?</p>
+      <p class="font-mono text-xs" style="color:var(--paper-dim)">Sign up your company for private fleet AIS tracking, a crew observations feed, and a public Captain's Notes log your customers can follow.</p>
+    </div>
+    <a href="login.html?mode=signup" class="mt-4 sm:mt-0 inline-block shrink-0 font-mono text-xs uppercase tracking-wider px-5 py-3 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Sign up your company &rarr;</a>
+  </div>
+</section>
+
 <footer class="max-w-6xl mx-auto px-4 sm:px-6 py-8 mt-4 border-t border-[rgba(217,174,104,0.2)]">
   <p class="font-mono text-[11px] leading-relaxed" style="color:var(--paper-dim)">
     <strong style="color:var(--brass-light)">SAFETY NOTICE:</strong> This dashboard is provided for general planning purposes only and is
@@ -480,6 +553,8 @@
     The operators of this site accept no liability for loss, damage, injury, or death arising from reliance on this information.
     In an emergency at sea, contact HM Coastguard on VHF Channel 16 or dial 999 / 112 and ask for the Coastguard.
   </p>
+  <a href="about.html" class="font-mono text-[11px] inline-block mt-3" style="color:var(--brass-light)">About &amp; Data Sources &rarr;</a>
+  <a href="#" id="feedbackLink" class="font-mono text-[11px] inline-block mt-3 ml-4" style="color:var(--brass-light)">Report an issue / suggest something &rarr;</a>
 </footer>
 
 <script src="app.js"></script>

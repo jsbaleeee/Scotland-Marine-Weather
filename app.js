@@ -97,8 +97,8 @@ let isProUser = true; // TEMP: set back to false to re-enable the paywall
 
 /* ---------- App state ---------- */
 const state = {
-  port: "oban",
-  proView: false,     // "Pro Maritime View" UI toggle (units/detail density)
+  port: loadSavedPort(),
+  proView: loadSavedProView(),     // "Pro Maritime View" UI toggle (units/detail density)
   unit: {
     temp: "C",         // C | F
     speed: "mph",       // mph | kn
@@ -387,6 +387,39 @@ function renderMarine(marine) {
 }
 
 /* ==========================================================================
+   4c-b) HISTORICAL COMPARISON (today vs. same date last year)
+   --------------------------------------------------------------------------
+   Uses Open-Meteo's free Historical Weather (archive) API — no key needed.
+   ========================================================================== */
+async function renderHistoricalComparison(lat, lon, todayMaxC) {
+  const el = $("historicalCompare");
+  if (todayMaxC == null) { el.textContent = "—"; return; }
+
+  const now = new Date();
+  const lastYear = new Date(now);
+  lastYear.setFullYear(now.getFullYear() - 1);
+  const dateStr = lastYear.toISOString().slice(0, 10);
+
+  try {
+    const url =
+      `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}` +
+      `&start_date=${dateStr}&end_date=${dateStr}&daily=temperature_2m_max&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("archive fetch failed");
+    const data = await res.json();
+    const lastYearMax = data?.daily?.temperature_2m_max?.[0];
+    if (lastYearMax == null) { el.textContent = "No data for this date"; return; }
+
+    const diff = Math.round(convertTemp(todayMaxC, state.unit.temp) - convertTemp(lastYearMax, state.unit.temp));
+    el.textContent = diff === 0
+      ? "Same as last year"
+      : `${diff > 0 ? "+" : ""}${diff}° ${diff > 0 ? "warmer" : "cooler"} than last year`;
+  } catch {
+    el.textContent = "—";
+  }
+}
+
+/* ==========================================================================
    4d) FOG RISK (heuristic estimate — not an official forecast)
    --------------------------------------------------------------------------
    Uses temperature/dew-point spread + humidity + wind as a rough proxy.
@@ -603,6 +636,8 @@ function setProView(on) {
   unitBadge.textContent = on
     ? `PRO MARITIME · °F · kn`
     : `STANDARD · °C · mph`;
+  const gustLabel = $("gustAlertUnitLabel");
+  if (gustLabel) gustLabel.textContent = `${state.unit.speed} gusts, this port`;
 
   // Pro view reveals the heavier panels (Observations, Captain's Notes,
   // Network Overview, Vessel Traffic/AIS, Route Planner) — Standard keeps
@@ -643,6 +678,7 @@ async function loadPort(key) {
     renderFogRisk(weather);
     renderHourlyGusts(weather);
     renderFreshnessBanner(false);
+    renderHistoricalComparison(port.lat, port.lon, weather?.daily?.temperature_2m_max?.[0]);
   } catch (err) {
     const cached = loadFromCache(key);
     if (cached) {
@@ -662,6 +698,7 @@ async function loadPort(key) {
 
   renderTide(port.lat, port.lon);
   updateFavouriteStar();
+  loadLocalKnowledge(key);
   if (state.proView) await updateAis(port.lat, port.lon); // Standard view skips this — saves a live connection nobody's looking at
   if (isCrewUnlocked()) renderCrewNotes();
 }
@@ -1086,6 +1123,11 @@ async function renderCaptainNotes(companyId) {
   if (error || !data || !data.length) { empty.classList.remove("hidden"); return; }
   empty.classList.add("hidden");
 
+  // Only the logged-in company that owns these notes can moderate them —
+  // RLS enforces this server-side too (the delete call fails harmlessly
+  // for anyone else), this just hides the button when it wouldn't work.
+  const canModerate = currentCompany && currentCompany.id === companyId;
+
   data.forEach((n) => {
     const row = document.createElement("div");
     row.className = "font-mono text-xs flex items-start gap-3 border-l-2 pl-3 py-1";
@@ -1096,10 +1138,21 @@ async function renderCaptainNotes(companyId) {
         ${n.photo_url ? `<br><a href="${n.photo_url}" target="_blank"><img src="${n.photo_url}" class="mt-1 rounded-sm" style="max-height:80px"></a>` : ""}
       </span>
       <span style="color:var(--paper-dim)" class="shrink-0">${new Date(n.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+      ${canModerate ? `<button data-id="${n.id}" class="delete-captain-note-btn shrink-0 px-2 py-0.5 rounded-sm border text-[10px]" style="border-color:var(--admiralty-red); color:#F3C9C4">Delete</button>` : ""}
     `;
     list.appendChild(row);
   });
+
+  list.querySelectorAll(".delete-captain-note-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await supabaseClient.from("captain_notes").delete().eq("id", Number(btn.dataset.id));
+      await renderCaptainNotes(companyId);
+    });
+  });
 }
+
+const CAPTAIN_NOTE_COOLDOWN_KEY = "smw_captain_note_last_post";
+const CAPTAIN_NOTE_COOLDOWN_MS = 30000; // basic client-side spam brake, not real protection — see note below
 
 function initCaptainNotes() {
   if (!isDbConfigured()) {
@@ -1117,6 +1170,24 @@ function initCaptainNotes() {
 
   $("captainNoteForm").addEventListener("submit", async (e) => {
     e.preventDefault();
+
+    // Honeypot: a real person never fills in this hidden field; a basic
+    // bot filling every input on the page will. Silently drop the post
+    // rather than telling the bot why, but don't error for the human.
+    if ($("captainWebsite").value.trim() !== "") return;
+
+    // Cooldown: crude client-side rate limit. This is NOT real spam
+    // protection (anyone editing localStorage or using a different
+    // browser bypasses it instantly) — it just stops accidental
+    // double-posts and the laziest bots. Real protection needs a
+    // server-side check (e.g. a Supabase Edge Function) before this is
+    // relied on for a genuinely public-facing launch.
+    const lastPost = Number(localStorage.getItem(CAPTAIN_NOTE_COOLDOWN_KEY) || 0);
+    if (Date.now() - lastPost < CAPTAIN_NOTE_COOLDOWN_MS) {
+      alert("Please wait a moment before posting again.");
+      return;
+    }
+
     const companyId = $("captainNotesCompany").value;
     const text = $("captainNoteText").value.trim();
     if (!companyId || !text) return;
@@ -1131,6 +1202,7 @@ function initCaptainNotes() {
     });
     if (error) { alert("Couldn't post: " + error.message); return; }
 
+    localStorage.setItem(CAPTAIN_NOTE_COOLDOWN_KEY, String(Date.now()));
     $("captainNoteText").value = "";
     $("captainNotePhoto").value = "";
     await renderCaptainNotes(companyId);
@@ -1165,6 +1237,209 @@ function initInstallPrompt() {
     btn.classList.add("hidden");
   });
   window.addEventListener("appinstalled", () => btn.classList.add("hidden"));
+}
+
+/* ==========================================================================
+   20) PUSH NOTIFICATIONS (gust alerts)
+   --------------------------------------------------------------------------
+   Client side only — subscribes this browser to gust alerts for the
+   current port and saves the subscription to Supabase. The part that
+   actually SENDS a notification when gusts exceed the threshold is a
+   separate server-side piece (Supabase Edge Function on a schedule) that
+   isn't something this browser-based build can deploy for you — see
+   supabase/functions/send-gust-alerts/index.ts and the deployment notes
+   there. Until that function is deployed and scheduled, subscribing here
+   saves your preference but nothing will actually notify you yet.
+   ========================================================================== */
+const VAPID_PUBLIC_KEY = ""; // <-- paste your VAPID public key (see edge function deployment notes)
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+function initGustAlerts() {
+  const btn = $("gustAlertSubscribeBtn");
+  const status = $("gustAlertStatus");
+  if (!btn) return;
+
+  if (!isDbConfigured() || !VAPID_PUBLIC_KEY || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    btn.disabled = true;
+    status.textContent = !isDbConfigured() ? "Needs a database connected first" : !VAPID_PUBLIC_KEY ? "Needs setup — see app.js" : "Not supported on this browser";
+    return;
+  }
+
+  btn.addEventListener("click", async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") { status.textContent = "Notifications blocked"; return; }
+
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+
+      const threshold = Number($("gustAlertThreshold").value) || 30;
+      const { error } = await supabaseClient.from("push_subscriptions").insert({
+        port: state.port,
+        gust_threshold_mph: state.unit.speed === "kn" ? threshold / 0.868976 : threshold,
+        subscription: subscription.toJSON(),
+      });
+      status.textContent = error ? "Couldn't save: " + error.message : `Subscribed for ${PORTS[state.port].name}`;
+    } catch (err) {
+      status.textContent = "Couldn't subscribe: " + err.message;
+    }
+  });
+}
+
+/* ==========================================================================
+   21) GEOLOCATION — "use my location" to find the nearest port
+   ========================================================================== */
+function findNearestPort(lat, lon) {
+  let nearestKey = null, nearestDist = Infinity;
+  for (const [key, port] of Object.entries(PORTS)) {
+    const d = haversineKm(lat, lon, port.lat, port.lon);
+    if (d < nearestDist) { nearestDist = d; nearestKey = key; }
+  }
+  return nearestKey;
+}
+
+function initUseLocation() {
+  const btn = $("useLocationBtn");
+  if (!btn || !("geolocation" in navigator)) { if (btn) btn.classList.add("hidden"); return; }
+
+  btn.addEventListener("click", () => {
+    btn.textContent = "…";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const nearest = findNearestPort(pos.coords.latitude, pos.coords.longitude);
+        btn.textContent = "📍";
+        if (nearest) { portSelect.value = nearest; loadPort(nearest); saveViewPreference(); }
+      },
+      () => { btn.textContent = "📍"; alert("Couldn't get your location — check your browser's location permission."); },
+      { timeout: 8000 }
+    );
+  });
+}
+
+/* ==========================================================================
+   22) SHARE — share current conditions as text
+   ========================================================================== */
+function initShareConditions() {
+  $("shareConditionsBtn")?.addEventListener("click", async () => {
+    const port = PORTS[state.port];
+    const c = state.lastData?.weather?.current;
+    if (!c) { alert("No conditions loaded yet for this port."); return; }
+
+    const text =
+      `PortCast — ${port.name}\n` +
+      `${fmtTemp(c.temperature_2m, state.unit.temp)}, ${WMO_DESCRIPTIONS[c.weather_code] ?? "—"}\n` +
+      `Wind: ${fmtSpeed(c.wind_speed_10m, state.unit.speed)} (gusts ${fmtSpeed(c.wind_gusts_10m, state.unit.speed)})\n` +
+      `${window.location.origin}${window.location.pathname}`;
+
+    if (navigator.share) {
+      try { await navigator.share({ title: `PortCast — ${port.name}`, text }); } catch { /* user cancelled — fine */ }
+    } else {
+      await navigator.clipboard.writeText(text);
+      const btn = $("shareConditionsBtn");
+      const original = btn.textContent;
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    }
+  });
+}
+
+/* ==========================================================================
+   23) PERSISTED VIEW PREFERENCE (last port + Standard/Pro across visits)
+   ========================================================================== */
+const LAST_PORT_KEY = "smw_last_port";
+const LAST_PROVIEW_KEY = "smw_last_proview";
+
+function saveViewPreference() {
+  localStorage.setItem(LAST_PORT_KEY, state.port);
+  localStorage.setItem(LAST_PROVIEW_KEY, String(state.proView));
+}
+function loadSavedPort() {
+  const saved = localStorage.getItem(LAST_PORT_KEY);
+  return saved && PORTS[saved] ? saved : "oban";
+}
+function loadSavedProView() {
+  return localStorage.getItem(LAST_PROVIEW_KEY) === "true";
+}
+
+/* ==========================================================================
+   24) FIRST-TIME WALKTHROUGH
+   ========================================================================== */
+const INTRO_SEEN_KEY = "smw_seen_intro";
+function initIntroWalkthrough() {
+  if (localStorage.getItem(INTRO_SEEN_KEY) === "true") return;
+  $("introModal").classList.remove("hidden");
+  $("introDismissBtn").addEventListener("click", () => {
+    $("introModal").classList.add("hidden");
+    localStorage.setItem(INTRO_SEEN_KEY, "true");
+  });
+}
+
+/* ==========================================================================
+   25) FEEDBACK LINK (report an issue / suggest something)
+   --------------------------------------------------------------------------
+   Simple mailto: for now — no backend needed. Once Supabase is live, this
+   is an easy upgrade to a proper in-app feedback form saved to a table,
+   but a mailto costs nothing to ship today and works immediately.
+   ========================================================================== */
+const FEEDBACK_EMAIL = ""; // <-- put your contact email here
+
+function initFeedbackLink() {
+  const link = $("feedbackLink");
+  if (!link) return;
+  if (!FEEDBACK_EMAIL) { link.classList.add("hidden"); return; }
+  const subject = encodeURIComponent("PortCast feedback");
+  const body = encodeURIComponent(`Port: ${state.port}\nWhat happened / what would help:\n\n`);
+  link.href = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
+}
+
+/* ==========================================================================
+   26) EDITABLE SITE CONTENT (announcement banner + Local Knowledge)
+   --------------------------------------------------------------------------
+   Both are edited through admin.html by the platform admin — no code
+   change or trip through Claude needed for a text update once this is
+   live and Supabase is configured.
+   ========================================================================== */
+const ANNOUNCEMENT_DISMISS_KEY = "smw_announcement_dismissed";
+
+async function loadAnnouncement() {
+  if (!isDbConfigured()) return;
+  const { data } = await supabaseClient.from("site_settings").select("*").eq("id", "main").maybeSingle();
+  if (!data || !data.announcement_active || !data.announcement) return;
+
+  // Re-show if the announcement text itself has changed since last dismissal.
+  const dismissedText = localStorage.getItem(ANNOUNCEMENT_DISMISS_KEY);
+  if (dismissedText === data.announcement) return;
+
+  $("announcementText").textContent = data.announcement;
+  $("announcementBanner").classList.remove("hidden");
+  $("announcementDismiss").addEventListener("click", () => {
+    localStorage.setItem(ANNOUNCEMENT_DISMISS_KEY, data.announcement);
+    $("announcementBanner").classList.add("hidden");
+  });
+}
+
+async function loadLocalKnowledge(portKey) {
+  const wrap = $("localKnowledge");
+  wrap.classList.add("hidden");
+  if (!isDbConfigured()) return;
+
+  const { data } = await supabaseClient.from("port_notes").select("note_text").eq("port", portKey).maybeSingle();
+  if (!data || !data.note_text) return;
+
+  $("localKnowledgeText").textContent = data.note_text;
+  wrap.classList.remove("hidden");
 }
 
 /* ==========================================================================
@@ -1230,6 +1505,22 @@ function initTheme() {
   });
 }
 
+/* ---------- Outdoor / sunlight readability mode ---------- */
+const CONTRAST_KEY = "smw_contrast";
+function applyContrast(on) {
+  if (on) document.documentElement.setAttribute("data-contrast", "high");
+  else document.documentElement.removeAttribute("data-contrast");
+  $("contrastToggle").style.background = on ? "var(--brass)" : "transparent";
+  $("contrastToggle").style.color = on ? "var(--navy-deep)" : "var(--brass-light)";
+  localStorage.setItem(CONTRAST_KEY, String(on));
+}
+function initContrastMode() {
+  applyContrast(localStorage.getItem(CONTRAST_KEY) === "true");
+  $("contrastToggle").addEventListener("click", () => {
+    applyContrast(document.documentElement.getAttribute("data-contrast") !== "high");
+  });
+}
+
 /* ==========================================================================
    12) ROUTE PLANNER (compare departure + arrival port conditions)
    ========================================================================== */
@@ -1285,15 +1576,15 @@ function initPrintHandover() {
 /* ==========================================================================
    8) INIT
    ========================================================================== */
-portSelect.addEventListener("change", (e) => loadPort(e.target.value));
-viewToggle.addEventListener("click", () => setProView(!state.proView));
+portSelect.addEventListener("change", (e) => { loadPort(e.target.value); saveViewPreference(); });
+viewToggle.addEventListener("click", () => { setProView(!state.proView); saveViewPreference(); });
 
 function renderCompanyIndicator() {
   const el = $("companyIndicator");
   if (!isDbConfigured()) { el.innerHTML = ""; return; }
   el.innerHTML = currentCompany
     ? `<span style="color:var(--seafoam)">${currentCompany.name}</span> · <a href="fleet.html" style="color:var(--brass-light)">Fleet</a> · <a href="#" id="logoutLink" style="color:var(--brass-light)">Log out</a>`
-    : `<a href="login.html" style="color:var(--brass-light)">Log in</a>`;
+    : `<a href="login.html" style="color:var(--brass-light)">Log in</a> · <a href="login.html?mode=signup" style="color:var(--brass-light)">Sign up</a>`;
   $("logoutLink")?.addEventListener("click", async (e) => {
     e.preventDefault();
     await supabaseClient.auth.signOut();
@@ -1302,9 +1593,11 @@ function renderCompanyIndicator() {
 }
 
 async function initApp() {
-  setProView(false);
+  portSelect.value = state.port;
+  setProView(state.proView);
   applyPaywall();
   initTheme();
+  initContrastMode();
   initPrintHandover();
   populateRouteSelectors();
   renderFavouritesRow();
@@ -1318,6 +1611,12 @@ async function initApp() {
   await initCrewPanel();
   initCaptainNotes();
   initInstallPrompt();
+  initGustAlerts();
+  initUseLocation();
+  initShareConditions();
+  initIntroWalkthrough();
+  initFeedbackLink();
+  loadAnnouncement();
   await loadPort(state.port);
 }
 

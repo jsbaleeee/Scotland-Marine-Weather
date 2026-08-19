@@ -37,7 +37,68 @@
 
   <!-- Unlocked state -->
   <div id="adminUnlocked" class="hidden">
+
+    <!-- Site Content Editor — only rendered for the flagged platform admin -->
+    <div id="contentEditor" class="hidden mb-8">
+      <p class="font-display text-lg mb-1" style="color:var(--paper)">Site Content</p>
+      <p class="text-[10px] mb-4" style="color:var(--paper-dim)">Edits here go live on the dashboard immediately — no code change or waiting on Claude needed.</p>
+
+      <div class="mb-6 p-4 rounded-sm" style="border:1px solid rgba(217,174,104,0.2)">
+        <p class="text-xs mb-2" style="color:var(--brass-light)">Site-wide announcement banner</p>
+        <textarea id="announcementInput" rows="2" placeholder="e.g. PortCast is in beta — please report anything odd via the feedback link." class="w-full text-xs rounded-sm px-3 py-2 mb-2" style="background:var(--navy); border:1px solid rgba(217,174,104,0.4); color:var(--paper)"></textarea>
+        <label class="flex items-center gap-2 text-xs mb-2" style="color:var(--paper-dim)">
+          <input id="announcementActive" type="checkbox"> Show this banner on the dashboard
+        </label>
+        <button id="saveAnnouncementBtn" class="text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Save announcement</button>
+        <span id="announcementSaveStatus" class="text-xs ml-2" style="color:var(--paper-dim)"></span>
+      </div>
+
+      <div class="p-4 rounded-sm" style="border:1px solid rgba(217,174,104,0.2)">
+        <p class="text-xs mb-2" style="color:var(--brass-light)">Local Knowledge (per port)</p>
+        <p class="text-[10px] mb-2" style="color:var(--paper-dim)">Real experience, not API data — currents, pinch-points, things a new crew member gets told verbally.</p>
+        <select id="localKnowledgePort" class="w-full text-xs rounded-sm px-3 py-2 mb-2" style="background:var(--navy); border:1px solid rgba(217,174,104,0.4); color:var(--paper)"></select>
+        <textarea id="localKnowledgeInput" rows="3" placeholder="e.g. Watch the cross-current on approach to the slipway on a falling tide." class="w-full text-xs rounded-sm px-3 py-2 mb-2" style="background:var(--navy); border:1px solid rgba(217,174,104,0.4); color:var(--paper)"></textarea>
+        <button id="saveLocalKnowledgeBtn" class="text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--seafoam); color:var(--navy-deep)">Save local knowledge</button>
+        <span id="localKnowledgeSaveStatus" class="text-xs ml-2" style="color:var(--paper-dim)"></span>
+      </div>
+    </div>
+
+    <!-- Platform Overview — only rendered for the flagged platform admin -->
+    <div id="platformOverview" class="hidden mb-8">
+      <p class="font-display text-lg mb-1" style="color:var(--paper)">Platform Overview</p>
+      <p class="text-[10px] mb-4" style="color:var(--paper-dim)">Every company on PortCast — visible to you as platform admin only.</p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div class="rounded-sm p-3" style="border:1px solid rgba(217,174,104,0.2)">
+          <p id="statCompanies" class="text-2xl" style="color:var(--brass-light)">—</p>
+          <p class="text-[10px]" style="color:var(--paper-dim)">Companies</p>
+        </div>
+        <div class="rounded-sm p-3" style="border:1px solid rgba(217,174,104,0.2)">
+          <p id="statVessels" class="text-2xl" style="color:var(--brass-light)">—</p>
+          <p class="text-[10px]" style="color:var(--paper-dim)">Vessels tracked</p>
+        </div>
+        <div class="rounded-sm p-3" style="border:1px solid rgba(217,174,104,0.2)">
+          <p id="statMembers" class="text-2xl" style="color:var(--brass-light)">—</p>
+          <p class="text-[10px]" style="color:var(--paper-dim)">Total users</p>
+        </div>
+        <div class="rounded-sm p-3" style="border:1px solid rgba(217,174,104,0.2)">
+          <p id="statObservations" class="text-2xl" style="color:var(--brass-light)">—</p>
+          <p class="text-[10px]" style="color:var(--paper-dim)">Observations logged</p>
+        </div>
+      </div>
+      <div class="overflow-x-auto rounded-sm" style="border:1px solid rgba(217,174,104,0.2);">
+        <table class="w-full text-xs">
+          <thead><tr><th>Company</th><th>Signed up</th><th>Vessels</th><th>Users</th><th>Observations</th></tr></thead>
+          <tbody id="companiesTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="flex flex-wrap items-center gap-3 mb-4">
+      <div id="companyFilterWrap" class="hidden">
+        <select id="filterCompany" class="text-xs bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-2 py-2">
+          <option value="">All companies</option>
+        </select>
+      </div>
       <select id="filterPort" class="text-xs bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-2 py-2">
         <option value="">All ports</option>
       </select>
