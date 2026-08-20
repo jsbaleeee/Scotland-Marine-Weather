@@ -14,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabase-config.js"></script>
 <style>
@@ -240,10 +241,10 @@
       <!-- View Toggle -->
       <div class="flex items-center gap-2 font-mono text-xs uppercase tracking-wider">
         <span id="labelStandard" style="color:var(--paper)">Standard</span>
-        <button id="viewToggle" class="toggle-track w-11 h-6 rounded-full relative shrink-0" aria-pressed="false" aria-label="Toggle Pro Maritime View">
+        <button id="viewToggle" class="toggle-track w-11 h-6 rounded-full relative shrink-0" aria-pressed="false" aria-label="Toggle Yacht Pro view">
           <span class="toggle-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full" style="background:var(--paper)"></span>
         </button>
-        <span id="labelPro" style="color:var(--brass-light)">Pro Maritime</span>
+        <span id="labelPro" style="color:var(--brass-light)">Yacht Pro</span>
       </div>
 
       <button id="themeToggle" aria-label="Toggle light or dark theme" class="font-mono text-xs px-2 py-1 rounded-sm border no-print" style="border-color:rgba(217,174,104,0.4); color:var(--brass-light)" title="Toggle light/dark">&#9788;</button>
@@ -399,6 +400,9 @@
       </div>
     </div>
     <p id="tideNote" class="text-xs mt-4" style="color:var(--seafoam)"></p>
+    <div class="mt-4" style="height:140px">
+      <canvas id="tideGraphCanvas"></canvas>
+    </div>
     <!-- Paywall overlay for full tide graph (pro-only) -->
     <div id="tidePaywall" class="hidden absolute inset-0 rounded-md flex items-center justify-center" style="background:rgba(7,26,46,0.55); backdrop-filter:blur(2px);">
       <button class="upgrade-btn font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Upgrade to Maritime Pro &middot; &pound;3/mo</button>
@@ -406,7 +410,7 @@
   </section>
 
   <!-- CARD: Crew / Pier Staff Observations (restricted) -->
-  <section class="pro-only-panel chart-card chart-corner-bl chart-corner-br rounded-md p-5 relative md:col-span-2">
+  <section class="commercial-panel hidden chart-card chart-corner-bl chart-corner-br rounded-md p-5 relative md:col-span-2">
     <div class="flex items-center justify-between mb-4">
       <div>
         <h2 class="font-display text-lg" style="color:var(--paper)">Observations</h2>
@@ -503,10 +507,13 @@
 </section>
 
 <!-- VESSEL TRAFFIC (AIS) -->
-<section class="pro-only-panel max-w-6xl mx-auto px-4 sm:px-6 pb-6">
+<section class="commercial-panel hidden max-w-6xl mx-auto px-4 sm:px-6 pb-6">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-5">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="font-display text-lg" style="color:var(--paper)">Vessel Traffic (AIS)</h2>
+      <div>
+        <h2 class="font-display text-lg" style="color:var(--paper)">Vessel Traffic (AIS)</h2>
+        <p class="font-mono text-[10px] uppercase tracking-widest mt-0.5" style="color:var(--admiralty-red)">Restricted &middot; Commercial Accounts Only</p>
+      </div>
       <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 08</span>
     </div>
     <div id="aisMap" class="rounded-sm overflow-hidden" style="aspect-ratio: 16 / 9; border:1px solid rgba(217,174,104,0.25);"></div>
@@ -554,7 +561,7 @@
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-6 text-center sm:text-left sm:flex sm:items-center sm:justify-between gap-6">
     <div>
       <p class="font-display text-xl mb-1" style="color:var(--paper)">Running a fleet or a pier?</p>
-      <p class="font-mono text-xs" style="color:var(--paper-dim)">Sign up your company for private fleet AIS tracking, a crew observations feed, and a public Captain's Notes log your customers can follow.</p>
+      <p class="font-mono text-xs" style="color:var(--paper-dim)">Sign up your company to unlock private fleet AIS tracking and a crew observations feed — visible only to your logged-in team. (Just cruising? The Yacht Pro toggle above needs no account at all.)</p>
     </div>
     <a href="login.html?mode=signup" class="mt-4 sm:mt-0 inline-block shrink-0 font-mono text-xs uppercase tracking-wider px-5 py-3 rounded-sm" style="background:var(--brass); color:var(--navy-deep)">Sign up your company &rarr;</a>
   </div>

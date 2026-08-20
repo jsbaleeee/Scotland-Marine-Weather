@@ -263,7 +263,91 @@ async function fetchAdmiraltyTideStatus(lat, lon) {
     nextHigh: nextHigh ? { time: nextHigh.DateTime, height: nextHigh.Height } : null,
     nextLow: nextLow ? { time: nextLow.DateTime, height: nextLow.Height } : null,
     todaysRange,
+    rawEvents: events, // used for the interpolated graph — never persisted (see licensing note above)
   };
+}
+
+/* ---------- Tide graph: cosine interpolation between known events ---------
+   Discovery tier only gives high/low EVENTS, not a continuous curve. This
+   interpolates a smooth curve between consecutive events using a cosine
+   function — the standard, well-established approximation for UK
+   semi-diurnal tides (this is essentially what EasyTide itself renders
+   for its free tier). Foundation/Premium tiers give true interval data
+   if a more precise curve is ever needed instead of this approximation.
+   ========================================================================== */
+let tideChart = null;
+
+function buildTideCurvePoints(events) {
+  const points = [];
+  const sorted = [...events]
+    .filter((e) => typeof e.Height === "number")
+    .sort((a, b) => new Date(a.DateTime) - new Date(b.DateTime));
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i], b = sorted[i + 1];
+    const tA = new Date(a.DateTime).getTime(), tB = new Date(b.DateTime).getTime();
+    const steps = 12; // ~ every 15-30 min depending on gap between events
+    for (let s = 0; s <= steps; s++) {
+      const t = tA + ((tB - tA) * s) / steps;
+      const frac = s / steps;
+      // Cosine interpolation: smooth S-curve between two extremes.
+      const height = (a.Height + b.Height) / 2 + ((a.Height - b.Height) / 2) * Math.cos(Math.PI * frac);
+      points.push({ x: t, y: height });
+    }
+  }
+  return points;
+}
+
+function renderTideGraph(events) {
+  const canvas = $("tideGraphCanvas");
+  if (!canvas || !window.Chart) return;
+
+  if (!events || !events.length) {
+    if (tideChart) { tideChart.destroy(); tideChart = null; }
+    return;
+  }
+
+  const points = buildTideCurvePoints(events);
+  const now = Date.now();
+
+  if (tideChart) tideChart.destroy();
+  tideChart = new Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: {
+      datasets: [{
+        data: points,
+        borderColor: "#6FA8A0",
+        backgroundColor: "rgba(111,168,160,0.12)",
+        fill: true,
+        pointRadius: 0,
+        tension: 0.4,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: {
+          type: "linear",
+          min: now - 3 * 3600 * 1000,
+          max: now + 21 * 3600 * 1000,
+          ticks: {
+            color: "#E5DCC4",
+            font: { family: "IBM Plex Mono", size: 9 },
+            callback: (val) => new Date(val).toLocaleTimeString("en-GB", { hour: "2-digit" }),
+          },
+          grid: { color: "rgba(217,174,104,0.1)" },
+        },
+        y: {
+          ticks: { color: "#E5DCC4", font: { family: "IBM Plex Mono", size: 9 }, callback: (v) => v.toFixed(1) + "m" },
+          grid: { color: "rgba(217,174,104,0.1)" },
+        },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
 }
 
 /* ---------- EA flood-monitoring gauge readings (fallback) -----------------
@@ -520,6 +604,7 @@ async function renderTide(lat, lon) {
     $("tideRange").textContent = fallbackRange != null ? `${fallbackRange.toFixed(1)} m (springs)` : "—";
     $("tideNote").textContent = `${tide.reason}. Consult local port authority tide tables.`;
     $("tideTrendIcon").textContent = "–";
+    renderTideGraph(null);
     return;
   }
 
@@ -533,14 +618,17 @@ async function renderTide(lat, lon) {
     $("tideLevel").textContent = `Next high ${fmtEvent(tide.nextHigh)} · Next low ${fmtEvent(tide.nextLow)}`;
     $("tideRange").textContent = tide.todaysRange != null ? `${tide.todaysRange.toFixed(1)} m (today, predicted)` : "—";
     $("tideNote").textContent = "Official predicted tide events — UK Hydrographic Office (Admiralty).";
+    renderTideGraph(tide.rawEvents);
   } else {
-    // EA fallback path: live gauge reading, not predicted.
+    // EA fallback path: live gauge reading, not predicted — no events
+    // data available to build a curve from, so clear any previous graph.
     $("tideLevel").textContent = `${tide.levelMetres.toFixed(2)} m`;
     const fallbackRange = TIDAL_RANGES[state.port];
     $("tideRange").textContent = fallbackRange != null ? `${fallbackRange.toFixed(1)} m (springs)` : "— (add via Admiralty Tide Tables)";
     $("tideNote").textContent =
       "Live gauge reading (EA tidal network), not an official predicted tide table. " +
       "Add a free Admiralty API key in app.js for predicted high/low times.";
+    renderTideGraph(null);
   }
 }
 
@@ -648,19 +736,20 @@ function setProView(on) {
   labelPro.style.color = on ? "var(--paper)" : "var(--brass-light)";
 
   unitBadge.textContent = on
-    ? `PRO MARITIME · °F · kn`
+    ? `YACHT PRO · °F · kn`
     : `STANDARD · °C · mph`;
   const gustLabel = $("gustAlertUnitLabel");
   if (gustLabel) gustLabel.textContent = `${state.unit.speed} gusts, this port`;
 
-  // Pro view reveals the heavier panels (Observations, Captain's Notes,
-  // Network Overview, Vessel Traffic/AIS, Route Planner) — Standard keeps
-  // it to core weather/tide/forecast so a first-time user isn't faced
-  // with 10 panels at once.
+  // Pro view reveals the yacht/leisure tier (Captain's Notes, Network
+  // Overview, Route Planner) — Standard keeps it to core weather/tide/
+  // forecast so a first-time user isn't faced with a wall of panels.
+  // Commercial panels (Observations, Vessel Traffic/AIS) are a SEPARATE
+  // dimension entirely — gated by company login, not this toggle — see
+  // toggleCommercialPanels().
   document.querySelectorAll(".pro-only-panel").forEach((el) => {
     el.classList.toggle("hidden", !on);
   });
-  if (on && !aisMap) updateAis(PORTS[state.port].lat, PORTS[state.port].lon);
 
   // Re-render with current cached data under new units, if we have it
   if (state.lastData) {
@@ -713,7 +802,7 @@ async function loadPort(key) {
   renderTide(port.lat, port.lon);
   updateFavouriteStar();
   loadLocalKnowledge(key);
-  if (state.proView) await updateAis(port.lat, port.lon); // Standard view skips this — saves a live connection nobody's looking at
+  if (currentCompany || !isDbConfigured()) await updateAis(port.lat, port.lon); // commercial-only (demo mode keeps old preview behaviour)
   if (isCrewUnlocked()) renderCrewNotes();
 }
 
@@ -1658,6 +1747,16 @@ function initPrintHandover() {
 portSelect.addEventListener("change", (e) => { loadPort(e.target.value); saveViewPreference(); });
 viewToggle.addEventListener("click", () => { setProView(!state.proView); saveViewPreference(); });
 
+/* ---------- Commercial panels (Observations, Vessel Traffic/AIS) --------
+   Strictly login-gated, and deliberately independent of the Standard/
+   Yacht-Pro toggle — a logged-in commercial account sees these regardless
+   of that toggle's state; nobody else sees them at all. */
+function toggleCommercialPanels(visible) {
+  document.querySelectorAll(".commercial-panel").forEach((el) => {
+    el.classList.toggle("hidden", !visible);
+  });
+}
+
 function renderCompanyIndicator() {
   const el = $("companyIndicator");
   if (!isDbConfigured()) { el.innerHTML = ""; return; }
@@ -1692,6 +1791,9 @@ $("routeBoatSpeed").addEventListener("change", () => {
 
   if (isDbConfigured()) currentCompany = await resolveCompanySession();
   renderCompanyIndicator();
+  // Demo mode (no database yet) shows commercial panels via the old PIN
+  // fallback inside initCrewPanel() — otherwise strictly login-gated.
+  toggleCommercialPanels(!!currentCompany || !isDbConfigured());
   await initCrewPanel();
   initCaptainNotes();
   initInstallPrompt();
