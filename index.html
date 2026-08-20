@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>PortCast</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0B2540">
@@ -28,7 +28,16 @@
     --seafoam:#6FA8A0;
     --ink:#132030;
   }
-  html,body{background:var(--navy); font-family:'Inter',sans-serif; color:var(--paper);}
+  html,body{background:var(--navy); font-family:'Inter',sans-serif; color:var(--paper); overflow-x:hidden; width:100%;}
+
+  /* iOS safe areas — notch at top, home-indicator bar at bottom.
+     Falls back to 0px automatically on devices without either. */
+  body{
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav{ padding-top: env(safe-area-inset-top); }
   .font-display{font-family:'Fraunces',serif;}
   .font-mono{font-family:'IBM Plex Mono',monospace;}
 
@@ -129,7 +138,7 @@
 <body class="min-h-screen">
 
 <!-- FIRST-TIME WALKTHROUGH -->
-<div id="introModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(7,26,46,0.85)">
+<div id="introModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style="background:rgba(7,26,46,0.85)">
   <div class="chart-card chart-corner-bl chart-corner-br rounded-md p-6 max-w-sm w-full">
     <p class="font-display text-xl mb-3" style="color:var(--paper)">Welcome to PortCast</p>
     <ul class="font-mono text-xs space-y-2 mb-5" style="color:var(--paper-dim)">
@@ -157,7 +166,7 @@
       </div>
     </div>
 
-    <div class="flex items-center gap-4 sm:gap-6">
+    <div class="flex items-center flex-wrap gap-x-3 gap-y-2 sm:gap-x-6 justify-end">
       <!-- Location Selector + Favourite -->
       <div class="flex items-center gap-2">
         <span id="favouriteStar" class="favourite-star text-xl" title="Save as favourite" role="button" tabindex="0" aria-label="Toggle favourite port">&#9733;</span>
@@ -512,13 +521,20 @@
       <h2 class="font-display text-lg" style="color:var(--paper)">Route Planner</h2>
       <span class="font-mono text-[10px] uppercase tracking-widest" style="color:var(--brass-light)">Panel 09</span>
     </div>
-    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-3">
       <select id="routeFrom" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 flex-1"></select>
       <span class="font-mono text-xs text-center" style="color:var(--brass-light)">&rarr;</span>
       <select id="routeTo" class="font-mono text-sm bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-3 py-2 flex-1"></select>
       <button id="routeCompareBtn" class="font-mono text-xs uppercase tracking-wider px-4 py-2 rounded-sm shrink-0" style="background:var(--brass); color:var(--navy-deep)">Compare</button>
     </div>
+    <div class="flex items-center gap-2 mb-4">
+      <label class="font-mono text-xs" style="color:var(--paper-dim)">Cruising speed:</label>
+      <input id="routeBoatSpeed" type="number" value="6" min="1" max="40" class="w-16 font-mono text-xs bg-[var(--navy)] border border-[rgba(217,174,104,0.4)] text-[var(--paper)] rounded-sm px-2 py-1">
+      <span class="font-mono text-xs" style="color:var(--paper-dim)">knots</span>
+    </div>
+    <div id="routePassageSummary" class="hidden font-mono text-sm mb-4 p-3 rounded-sm" style="background:rgba(217,174,104,0.08); border:1px solid rgba(217,174,104,0.3)"></div>
     <div id="routeResults" class="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-sm"></div>
+    <div id="routeWeatherWindow" class="mt-4"></div>
   </div>
 </section>
 

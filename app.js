@@ -558,6 +558,18 @@ function renderForecast(weather, marine) {
 
   const waveMax = marine?.daily?.wave_height_max || [];
 
+  // "Best day" — lowest combined gust + rain-chance score across the
+  // forecast window. Simple heuristic, not a substitute for judgement,
+  // but a useful at-a-glance pointer for "which day looks calmest".
+  let bestIdx = -1, bestScore = Infinity;
+  daily.time.forEach((_, i) => {
+    const gust = daily.wind_gusts_10m_max?.[i];
+    const rain = daily.precipitation_probability_max?.[i];
+    if (gust == null) return;
+    const score = gust + (rain ?? 0) * 0.5;
+    if (score < bestScore) { bestScore = score; bestIdx = i; }
+  });
+
   daily.time.forEach((dateStr, i) => {
     const date = new Date(dateStr);
     const dayLabel = date.toLocaleDateString("en-GB", { weekday: "short" });
@@ -568,12 +580,14 @@ function renderForecast(weather, marine) {
     const gust = daily.wind_gusts_10m_max?.[i];
     const rainChance = daily.precipitation_probability_max?.[i];
     const wave = waveMax[i];
+    const isBest = i === bestIdx;
 
     const cell = document.createElement("div");
     cell.className = "rounded-sm p-3";
-    cell.style.background = "rgba(241,235,218,0.04)";
-    cell.style.border = "1px solid rgba(217,174,104,0.15)";
+    cell.style.background = isBest ? "rgba(111,168,160,0.1)" : "rgba(241,235,218,0.04)";
+    cell.style.border = isBest ? "1px solid var(--seafoam)" : "1px solid rgba(217,174,104,0.15)";
     cell.innerHTML = `
+      ${isBest ? `<p class="uppercase tracking-wide mb-1" style="color:var(--seafoam)">★ Best day</p>` : ""}
       <p style="color:var(--brass-light)" class="uppercase tracking-wide">${dayLabel} <span style="color:var(--paper-dim)">${dateLabel}</span></p>
       <p style="color:var(--paper)" class="mt-1">${desc}</p>
       <p style="color:var(--paper)" class="mt-1 instrument-value">
@@ -1540,6 +1554,8 @@ async function compareRoute() {
   const toKey = $("routeTo").value;
   const results = $("routeResults");
   results.innerHTML = `<p style="color:var(--paper-dim)">Loading&hellip;</p>`;
+  $("routePassageSummary").classList.add("hidden");
+  $("routeWeatherWindow").innerHTML = "";
 
   const [fromData, toData] = await Promise.all([
     fetchWeatherAndMarine(PORTS[fromKey].lat, PORTS[fromKey].lon).catch(() => null),
@@ -1564,6 +1580,69 @@ async function compareRoute() {
     `;
     results.appendChild(cell);
   });
+
+  renderPassageSummary(fromKey, toKey);
+  renderRouteWeatherWindow(fromData, toData);
+}
+
+/* ---------- Passage math: distance + ETA at a given cruising speed ------- */
+function renderPassageSummary(fromKey, toKey) {
+  const from = PORTS[fromKey], to = PORTS[toKey];
+  const speedKn = Number($("routeBoatSpeed").value) || 6;
+  const distanceKm = haversineKm(from.lat, from.lon, to.lat, to.lon);
+  const distanceNm = distanceKm / 1.852;
+  const hours = distanceNm / speedKn;
+  const wholeHours = Math.floor(hours);
+  const mins = Math.round((hours - wholeHours) * 60);
+
+  const el = $("routePassageSummary");
+  el.classList.remove("hidden");
+  el.innerHTML = `
+    <strong style="color:var(--paper)">${distanceNm.toFixed(1)} nm</strong> direct line, ${from.name} &rarr; ${to.name}<br>
+    <span style="color:var(--paper-dim)">Est. passage time at ${speedKn} kn: <strong style="color:var(--brass-light)">${wholeHours}h ${mins}m</strong></span><br>
+    <span class="text-[10px]" style="color:var(--paper-dim)">Straight-line distance only — not a charted route. Doesn't account for tidal set, headlands, or hazards; use a proper passage plan and chart, not this figure alone.</span>
+  `;
+}
+
+/* ---------- Weather window: 5-day outlook across BOTH ends of the route -- */
+function computeDailyYachtBadge(gustMph, waveM, rainPct) {
+  // Tighter thresholds than the general conditions badge — small
+  // recreational boats are more weather-sensitive than a CalMac ferry.
+  if (gustMph == null) return { level: "unknown", label: "—" };
+  if (gustMph >= 25 || (waveM != null && waveM >= 1.5)) return { level: "red", label: "Poor" };
+  if (gustMph >= 15 || (waveM != null && waveM >= 0.8)) return { level: "amber", label: "Moderate" };
+  return { level: "green", label: "Good" };
+}
+
+function renderRouteWeatherWindow(fromData, toData) {
+  const wrap = $("routeWeatherWindow");
+  const fromDaily = fromData?.weather?.daily;
+  const toDaily = toData?.weather?.daily;
+  if (!fromDaily?.time) { wrap.innerHTML = ""; return; }
+
+  const fromWave = fromData?.marine?.daily?.wave_height_max || [];
+  const toWave = toData?.marine?.daily?.wave_height_max || [];
+
+  let html = `<p class="font-mono text-[10px] uppercase tracking-widest mb-2" style="color:var(--paper-dim)">5-day weather window (worse of both ends)</p><div class="flex gap-2 overflow-x-auto">`;
+
+  fromDaily.time.forEach((dateStr, i) => {
+    const dayLabel = new Date(dateStr).toLocaleDateString("en-GB", { weekday: "short" });
+    const fromBadge = computeDailyYachtBadge(fromDaily.wind_gusts_10m_max?.[i], fromWave[i], fromDaily.precipitation_probability_max?.[i]);
+    const toBadge = toDaily ? computeDailyYachtBadge(toDaily.wind_gusts_10m_max?.[i], toWave[i], toDaily.precipitation_probability_max?.[i]) : fromBadge;
+    // Use whichever end is worse that day — a passage needs both ends survivable.
+    const severity = { green: 0, amber: 1, red: 2, unknown: 0 };
+    const worse = severity[toBadge.level] > severity[fromBadge.level] ? toBadge : fromBadge;
+
+    const cell = document.createElement("div");
+    cell.className = "text-center shrink-0 rounded-sm p-2 " +
+      (worse.level === "green" ? "badge-green" : worse.level === "amber" ? "badge-amber" : worse.level === "red" ? "badge-red" : "");
+    cell.style.minWidth = "3.5rem";
+    cell.innerHTML = `<p class="text-[10px]">${dayLabel}</p><p class="text-[10px] mt-1">${worse.label}</p>`;
+    html += cell.outerHTML;
+  });
+
+  html += `</div>`;
+  wrap.innerHTML = html;
 }
 
 /* ==========================================================================
@@ -1603,6 +1682,11 @@ async function initApp() {
   renderFavouritesRow();
   $("favouriteStar").addEventListener("click", () => toggleFavourite(state.port));
   $("routeCompareBtn").addEventListener("click", compareRoute);
+$("routeBoatSpeed").addEventListener("change", () => {
+  if (!$("routePassageSummary").classList.contains("hidden")) {
+    renderPassageSummary($("routeFrom").value, $("routeTo").value);
+  }
+});
   $("exportCrewCsvBtn").addEventListener("click", exportCrewNotesCsv);
   $("overviewLoadBtn").addEventListener("click", loadNetworkOverview);
 
